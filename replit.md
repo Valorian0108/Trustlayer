@@ -1,6 +1,6 @@
-# [Project name]
+# Monad Trust Layer
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+An interactive trust console showing how an AI agent can move small actions through instantly while requiring proportional authorization proof for consequential actions.
 
 ## Run & Operate
 
@@ -22,15 +22,25 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/monad-trust-layer/` — the judge-facing React/Vite demo.
+- `artifacts/monad-trust-layer/src/App.tsx` — the single-screen interaction model and local demo state.
+- `artifacts/monad-trust-layer/src/index.css` — the visual system and responsive layout.
+- `lib/api-spec/openapi.yaml` — shared API contract; currently unchanged because the first build is a local-state prototype.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The first build is explicitly labelled Demo mode and uses local state; it does not claim real passkeys, proofs, wallet writes, or Monad transactions before those integrations are connected.
+- The demo's primary story is proportional trust: a $3 action auto-approves while a $500 action runs through a visible proof → verify → approve sequence.
+- The UI is intentionally a single-screen console so a judge can understand and run the complete story without navigating through a multi-page product.
+- Integration seams are named in the product copy for Privy/Dynamic, Semaphore/verifier, MetaMask, and Monad testnet so the demo can become production-backed without rewriting the interaction model.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Register a demo owner identity.
+- Choose a bounded agent delegation tier.
+- Run a low-stakes action with no verification pause.
+- Run a high-stakes action through a staged authorization sequence or see it blocked by policy.
+- Review a live local activity feed and reset the demo for another run.
 
 ## User preferences
 
@@ -38,7 +48,8 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Keep Demo mode language visible until passkey, proof, wallet, and chain integrations are real.
+- The frontend artifact owns the current judge demo; do not add a second workflow for it.
 
 ## Pointers
 

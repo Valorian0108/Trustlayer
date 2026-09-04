@@ -1,0 +1,1 @@
+- [Monad Trust Layer demo boundary](monad-trust-layer-demo.md) — keep the judge flow visibly honest until passkey, proof, wallet, and Monad integrations are live.
