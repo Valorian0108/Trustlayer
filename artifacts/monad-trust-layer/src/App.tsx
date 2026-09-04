@@ -5,6 +5,10 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
 import {
+  PrivyProvider,
+  useSignupWithPasskey,
+} from '@privy-io/react-auth';
+import {
   Activity,
   ArrowRight,
   Bot,
@@ -31,8 +35,54 @@ import {
 } from 'wouter';
 
 const queryClient = new QueryClient();
+const privyAppId = import.meta.env.VITE_PRIVY_APP_ID as string | undefined;
+const hasPrivyAppId = Boolean(privyAppId);
 
-function Home() {
+function PrivyOwnerRegistration({
+  onComplete,
+  onError,
+}: {
+  onComplete: () => void;
+  onError: (error: unknown) => void;
+}) {
+  const { signupWithPasskey, state } = useSignupWithPasskey({
+    onComplete,
+  });
+  const isBusy = [
+    'generating-challenge',
+    'awaiting-passkey',
+    'submitting-response',
+  ].includes(state.status);
+  const label =
+    state.status === 'awaiting-passkey'
+      ? 'Complete passkey'
+      : state.status === 'submitting-response'
+        ? 'Verifying passkey…'
+        : state.status === 'generating-challenge'
+          ? 'Preparing passkey…'
+          : 'Register owner';
+  const handleClick = async () => {
+    try {
+      await signupWithPasskey();
+    } catch (error) {
+      onError(error);
+    }
+  };
+
+  return (
+    <button
+      className="mini-button"
+      onClick={() => void handleClick()}
+      disabled={isBusy}
+      data-testid="button-register-owner"
+    >
+      <Fingerprint size={13} />
+      {label}
+    </button>
+  );
+}
+
+function Home({ privyConfigured }: { privyConfigured: boolean }) {
   type FeedKind = 'success' | 'pending' | 'info' | 'blocked';
   type FeedItem = {
     id: string;
@@ -80,6 +130,18 @@ function Home() {
       kind: 'success',
       title: 'Owner identity verified',
       detail: 'Owner trust anchor established.',
+    });
+  };
+
+  const handleOwnerError = (error: unknown) => {
+    const detail =
+      error instanceof Error
+        ? error.message
+        : 'The passkey flow could not be completed.';
+    pushFeed({
+      kind: 'blocked',
+      title: 'Owner registration needs attention',
+      detail,
     });
   };
 
@@ -305,15 +367,23 @@ function Home() {
                         </div>
                         <Check className="status-check" size={16} />
                       </div>
+                    ) : privyConfigured ? (
+                      <PrivyOwnerRegistration
+                        onComplete={registerOwner}
+                        onError={handleOwnerError}
+                      />
                     ) : (
-                      <button
-                        className="mini-button"
-                        onClick={registerOwner}
-                        data-testid="button-register-owner"
-                      >
-                        <Fingerprint size={13} />
-                        Register owner
-                      </button>
+                      <div className="registration-gate">
+                        <button
+                          className="mini-button"
+                          disabled
+                          data-testid="button-register-owner"
+                        >
+                          <Fingerprint size={13} />
+                          Register owner
+                        </button>
+                        <span>Privy connection required</span>
+                      </div>
                     )}
                   </div>
                   <div className="setup-cell">
@@ -499,30 +569,33 @@ function Home() {
   );
 }
 
-function Router() {
-  return (
-    // Keep a shared shell (sidebar, navbar) outside the boundary so it
-    // survives a page crash.
-    <RoutedErrorBoundary>
-      <Switch>
-        <Route path="/" component={Home} />
-        <Route component={NotFound} />
-      </Switch>
-    </RoutedErrorBoundary>
-  );
-}
-
 function RoutedErrorBoundary({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   return <ErrorBoundary resetKey={location}>{children}</ErrorBoundary>;
 }
 
 function App() {
+  const routedApp = (
+    <RoutedErrorBoundary>
+      <Switch>
+        <Route
+          path="/"
+          component={() => <Home privyConfigured={hasPrivyAppId} />}
+        />
+        <Route component={NotFound} />
+      </Switch>
+    </RoutedErrorBoundary>
+  );
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Router />
+          {privyAppId ? (
+            <PrivyProvider appId={privyAppId}>{routedApp}</PrivyProvider>
+          ) : (
+            routedApp
+          )}
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

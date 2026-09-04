@@ -889,6 +889,21 @@ select:focus-visible {
   transform: none;
 }
 
+.registration-gate {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.registration-gate span {
+  color: var(--ink-soft);
+  font-family: var(--app-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .tier-row {
   display: flex;
   gap: 6px;
