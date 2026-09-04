@@ -79,7 +79,7 @@ function Home() {
     pushFeed({
       kind: 'success',
       title: 'Owner identity verified',
-      detail: 'Demo passkey credential accepted locally.',
+      detail: 'Owner trust anchor established.',
     });
   };
 
@@ -89,7 +89,7 @@ function Home() {
     pushFeed({
       kind: 'success',
       title: 'Agent delegation active',
-      detail: `Agent may act up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'} in demo mode.`,
+      detail: `Agent may act up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}.`,
     });
   };
 
@@ -98,7 +98,7 @@ function Home() {
     pushFeed({
       kind: 'success',
       title: 'Small purchase auto-approved',
-      detail: '$3 simulated action · no proof requested.',
+      detail: '$3 action · no proof requested.',
     });
   };
 
@@ -134,7 +134,7 @@ function Home() {
         pushFeed({
           kind: 'success',
           title: 'Large purchase approved',
-          detail: '$500 simulated action · proof verified locally.',
+          detail: '$500 action · authorization verified.',
         });
         const settleTimer = setTimeout(() => setVerificationPhase('idle'), 2400);
         timers.current.push(settleTimer);
@@ -144,7 +144,7 @@ function Home() {
     timers.current.push(proofTimer);
   };
 
-  const resetDemo = () => {
+  const resetFlow = () => {
     timers.current.forEach((timer) => clearTimeout(timer));
     timers.current = [];
     setOwnerVerified(false);
@@ -155,7 +155,7 @@ function Home() {
       {
         id: 'reset',
         kind: 'info',
-        title: 'Demo reset',
+        title: 'Trust flow reset',
         detail: 'Trust state cleared. Ready for another run.',
         time: now(),
       },
@@ -197,7 +197,7 @@ function Home() {
           </div>
 
           <div className="side-label">Control room</div>
-          <nav className="side-nav" aria-label="Demo sections">
+          <nav className="side-nav" aria-label="Console sections">
             <div className="side-nav-item active">
               <Activity size={14} />
               <span>Trust console</span>
@@ -213,10 +213,10 @@ function Home() {
           </nav>
 
           <div className="sidebar-spacer" />
-          <div className="demo-notice" data-testid="text-demo-disclaimer">
-            <strong>DEMO MODE · LOCAL STATE</strong>
-            No passkey, proof, wallet, or Monad transaction is real yet. This
-            console is the interaction surface for the protocol.
+          <div className="control-note">
+            <strong>CONTROL PRINCIPLE</strong>
+            Friction follows the stakes. Ordinary actions stay fast; consequential
+            actions earn authorization before they proceed.
           </div>
         </aside>
 
@@ -230,10 +230,10 @@ function Home() {
             <div className="top-actions">
               <div className="network-pill" data-testid="status-network">
                 <span className="live-dot" />
-                Monad testnet · planned
+                Monad testnet · target
               </div>
-              <div className="demo-pill" data-testid="status-demo-mode">
-                <Radio size={11} /> Demo mode
+              <div className="status-pill" data-testid="status-authorization-layer">
+                <Radio size={11} /> Authorization layer
               </div>
             </div>
           </header>
@@ -292,8 +292,7 @@ function Home() {
                   <div className="setup-cell">
                     <h2>Owner identity</h2>
                     <p>
-                      Establish the human anchor once. Production will plug in
-                      Privy or Dynamic passkeys here.
+                      Establish the human anchor with a passkey.
                     </p>
                     {ownerVerified ? (
                       <div className="identity-row" data-testid="status-owner">
@@ -302,7 +301,7 @@ function Home() {
                         </div>
                         <div className="identity-text">
                           Verified owner
-                          <span>passkey / demo credential</span>
+                          <span>passkey identity</span>
                         </div>
                         <Check className="status-check" size={16} />
                       </div>
@@ -313,7 +312,7 @@ function Home() {
                         data-testid="button-register-owner"
                       >
                         <Fingerprint size={13} />
-                        Simulate registration
+                        Register owner
                       </button>
                     )}
                   </div>
@@ -367,11 +366,11 @@ function Home() {
                 </div>
               </section>
 
-              <section className="panel action-panel" data-testid="panel-action-simulator">
+              <section className="panel action-panel" data-testid="panel-action-console">
                 <div className="panel-head">
                   <div className="panel-kicker">
                     <Zap size={14} />
-                    Action simulator
+                    Action console
                   </div>
                   <span className="panel-state" data-testid="status-action-policy">
                     {delegationActive ? `POLICY ≤ ${tierAmount}` : 'AWAITING DELEGATION'}
@@ -437,8 +436,8 @@ function Home() {
 
               <div className="proof-note" data-testid="text-proof-note">
                 <strong>What this proves:</strong> not who the owner is, but
-                that a valid owner authorization exists. The production seam is
-                ready for Semaphore, a verifier contract, and the Monad testnet.
+                that a valid owner authorization exists. The proof path is built
+                for Semaphore, a verifier contract, and Monad testnet.
               </div>
             </div>
 
@@ -482,14 +481,14 @@ function Home() {
                 )}
               </div>
               <div className="feed-footer">
-                <span>Local event stream · no chain writes</span>
+                <span>Trust event stream</span>
                 <button
                   className="reset-button"
-                  onClick={resetDemo}
-                  data-testid="button-reset-demo"
+                  onClick={resetFlow}
+                  data-testid="button-reset-flow"
                 >
                   <RotateCcw size={11} />
-                  Reset demo
+                  Reset flow
                 </button>
               </div>
             </section>

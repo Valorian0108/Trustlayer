@@ -566,7 +566,7 @@ select:focus-visible {
   flex: 1;
 }
 
-.demo-notice {
+.control-note {
   border-top: 1px solid rgba(255,255,255,0.12);
   padding: 17px 8px 0;
   color: #adb2b6;
@@ -574,7 +574,7 @@ select:focus-visible {
   line-height: 1.55;
 }
 
-.demo-notice strong {
+.control-note strong {
   display: block;
   color: var(--lime);
   font-family: var(--app-font-mono);
@@ -617,7 +617,7 @@ select:focus-visible {
 }
 
 .network-pill,
-.demo-pill {
+.status-pill {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -629,7 +629,7 @@ select:focus-visible {
   background: rgba(251,249,244,0.65);
 }
 
-.demo-pill {
+.status-pill {
   color: var(--lime-deep);
   border-color: rgba(121,149,45,0.32);
   background: rgba(199,237,95,0.18);
@@ -1189,7 +1189,7 @@ select:focus-visible {
 
   .side-label,
   .sidebar-spacer,
-  .demo-notice {
+  .control-note {
     display: none;
   }
 
