@@ -15,57 +15,47 @@ export interface AgentTransaction {
 
 class MetaMaskAgentManager {
   private agent: MetaMaskAgent | null = null;
-  private sdk: any = null;
 
   async initialize(): Promise<boolean> {
     try {
-      // Dynamic import of MetaMask SDK to avoid issues if not installed
-      const { MetaMaskSDK } = await import('@metamask/sdk');
-      
-      this.sdk = new MetaMaskSDK({
-        dappMetadata: {
-          name: "Monad Trust Layer",
-          url: window.location.origin,
-        },
-        logging: {
-          developerMode: false,
-        },
-        storage: {
-          enabled: true,
-        },
-      });
-
-      await this.sdk.init();
-      
-      return true;
+      // Check if MetaMask is installed
+      if (typeof window !== 'undefined' && (window as any).ethereum) {
+        return true;
+      }
+      return false;
     } catch (error) {
-      console.error('MetaMask SDK initialization failed:', error);
+      console.error('MetaMask initialization failed:', error);
       return false;
     }
   }
 
   async connect(): Promise<MetaMaskAgent | null> {
     try {
-      if (!this.sdk) {
+      if (!this.agent) {
         await this.initialize();
       }
 
-      const accounts = await this.sdk.connect();
+      const ethereum = (window as any).ethereum;
+      if (!ethereum) {
+        throw new Error('MetaMask not installed');
+      }
+
+      const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
       
       if (accounts && accounts.length > 0) {
-        const chainId = await this.sdk.getChainId();
+        const chainId = await ethereum.request({ method: 'eth_chainId' });
+        const chainIdNumber = parseInt(chainId, 16);
         
         this.agent = {
           address: accounts[0],
           connected: true,
-          chainId: chainId
+          chainId: chainIdNumber
         };
 
         // Check if we're on Monad testnet
         const MONAD_TESTNET_CHAIN_ID = 10143;
-        if (chainId !== MONAD_TESTNET_CHAIN_ID) {
-          console.warn(`Not on Monad testnet. Current chain: ${chainId}, Expected: ${MONAD_TESTNET_CHAIN_ID}`);
-          // Could add chain switching here
+        if (chainIdNumber !== MONAD_TESTNET_CHAIN_ID) {
+          console.warn(`Not on Monad testnet. Current chain: ${chainIdNumber}, Expected: ${MONAD_TESTNET_CHAIN_ID}`);
         }
 
         return this.agent;
@@ -80,9 +70,6 @@ class MetaMaskAgentManager {
 
   async disconnect(): Promise<void> {
     try {
-      if (this.sdk) {
-        await this.sdk.disconnect();
-      }
       this.agent = null;
     } catch (error) {
       console.error('MetaMask disconnect failed:', error);
@@ -91,15 +78,23 @@ class MetaMaskAgentManager {
 
   async sendTransaction(transaction: AgentTransaction): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
     try {
-      if (!this.agent || !this.sdk) {
+      if (!this.agent) {
         return { success: false, error: 'Agent not connected' };
       }
 
-      const txHash = await this.sdk.sendTransaction({
-        to: transaction.to,
-        data: transaction.data,
-        value: transaction.value || '0x0',
-        gas: transaction.gasLimit,
+      const ethereum = (window as any).ethereum;
+      if (!ethereum) {
+        return { success: false, error: 'MetaMask not available' };
+      }
+
+      const txHash = await ethereum.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          to: transaction.to,
+          data: transaction.data,
+          value: transaction.value || '0x0',
+          gas: transaction.gasLimit,
+        }],
       });
 
       return { 
@@ -128,12 +123,43 @@ class MetaMaskAgentManager {
       const MONAD_TESTNET_CHAIN_ID = '0x2797'; // 10143 in hex
       const MONAD_TESTNET_RPC = 'https://testnet-rpc.monad.xyz';
       
-      await this.sdk.switchChain(MONAD_TESTNET_CHAIN_ID);
+      const ethereum = (window as any).ethereum;
+      if (!ethereum) {
+        return false;
+      }
+
+      try {
+        await ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: MONAD_TESTNET_CHAIN_ID }],
+        });
+      } catch (switchError: any) {
+        // This error code indicates that the chain has not been added to MetaMask
+        if (switchError.code === 4902) {
+          await ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: MONAD_TESTNET_CHAIN_ID,
+              chainName: 'Monad Testnet',
+              nativeCurrency: {
+                name: 'MON',
+                symbol: 'MON',
+                decimals: 18,
+              },
+              rpcUrls: [MONAD_TESTNET_RPC],
+              blockExplorerUrls: ['https://testnet.monad.xyz'],
+            }],
+          });
+        } else {
+          throw switchError;
+        }
+      }
       
       // Update chain ID after switch
-      const chainId = await this.sdk.getChainId();
+      const chainId = await ethereum.request({ method: 'eth_chainId' });
+      const chainIdNumber = parseInt(chainId, 16);
       if (this.agent) {
-        this.agent.chainId = chainId;
+        this.agent.chainId = chainIdNumber;
       }
       
       return true;
