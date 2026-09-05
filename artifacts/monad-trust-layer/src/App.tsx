@@ -28,6 +28,8 @@ import {
   WalletCards,
   X,
   Zap,
+  Wallet,
+  AlertCircle,
 } from 'lucide-react';
 import {
   Route,
@@ -36,6 +38,7 @@ import {
   Router as WouterRouter,
 } from 'wouter';
 import { getContractAddresses, createDelegationWithPrivy, verifyAuthorizationWithPrivy, simulateContractCall } from './contracts';
+import { getMetaMaskAgentManager, createDelegationTransaction, createVerificationTransaction } from './metamask-agent';
 
 const queryClient = new QueryClient();
 const privyAppId = import.meta.env.VITE_PRIVY_APP_ID as string | undefined;
@@ -121,6 +124,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
     useState<VerificationPhase>('idle');
   const [contractsReady, setContractsReady] = useState(false);
   const [useRealTransactions, setUseRealTransactions] = useState(false);
+  const [agentWallet, setAgentWallet] = useState<{ address: string; connected: boolean } | null>(null);
   const [feed, setFeed] = useState<FeedItem[]>([
     {
       id: 'ready',
@@ -153,6 +157,39 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
       setUseRealTransactions(true);
     }
   }, [authenticated, contractsReady]);
+
+  // Initialize MetaMask agent manager
+  const agentManager = getMetaMaskAgentManager();
+
+  const connectAgentWallet = async () => {
+    try {
+      pushFeed({
+        kind: 'pending',
+        title: 'Connecting agent wallet',
+        detail: 'Connecting MetaMask agent wallet...',
+      });
+
+      const agent = await agentManager.connect();
+      
+      if (agent) {
+        setAgentWallet({ address: agent.address, connected: agent.connected });
+        pushFeed({
+          kind: 'success',
+          title: 'Agent wallet connected',
+          detail: `MetaMask agent wallet: ${agent.address.slice(0, 8)}...${agent.address.slice(-4)}`,
+        });
+      } else {
+        throw new Error('Failed to connect agent wallet');
+      }
+    } catch (error) {
+      console.error('Agent wallet connection failed:', error);
+      pushFeed({
+        kind: 'blocked',
+        title: 'Agent wallet connection failed',
+        detail: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  };
 
   useEffect(() => {
     return () => timers.current.forEach((timer) => clearTimeout(timer));
@@ -205,7 +242,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         // Use Privy wallet for real transaction
         const tierValue = selectedTier === 'elevated' ? 2 : selectedTier === 'routine' ? 1 : 0;
         const expiresAt = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days from now
-        const agentAddress = '0x1234567890123456789012345678901234567890'; // Demo agent address
+        const agentAddress = agentWallet?.address || '0x1234567890123456789012345678901234567890'; // Use real agent address if available
         
         // Create a mock Privy instance for demo purposes
         const mockPrivy = {
@@ -566,6 +603,29 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
                       Give this agent a clear ceiling. The proof checks the
                       authorization without exposing the owner.
                     </p>
+                    {!agentWallet && (
+                      <button
+                        className="mini-button secondary"
+                        onClick={connectAgentWallet}
+                        disabled={!ownerVerified}
+                        data-testid="button-connect-agent-wallet"
+                      >
+                        <Wallet size={13} />
+                        Connect agent wallet
+                      </button>
+                    )}
+                    {agentWallet && (
+                      <div className="agent-wallet-row" data-testid="status-agent-wallet">
+                        <div className="agent-badge">
+                          <Wallet size={15} />
+                        </div>
+                        <div className="identity-text">
+                          Agent wallet
+                          <span>{agentWallet.address.slice(0, 8)}...{agentWallet.address.slice(-4)}</span>
+                        </div>
+                        <Check className="status-check" size={16} />
+                      </div>
+                    )}
                     <div className="tier-row" role="group" aria-label="Delegation tier">
                       {[
                         { value: 'micro', label: '$5' },

@@ -76,6 +76,7 @@
   },
   "dependencies": {
     "@privy-io/react-auth": "^3.39.0",
-    "@stripe/stripe-js": "^9.15.0"
+    "@stripe/stripe-js": "^9.15.0",
+    "@metamask/sdk": "^4.0.0"
   }
 }

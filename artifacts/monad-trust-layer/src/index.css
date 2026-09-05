@@ -1205,6 +1205,16 @@ select:focus-visible {
   transition: color 0.15s ease;
 }
 
+.agent-wallet-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--muted);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
 .tx-link:hover {
   color: var(--accent-hover);
   text-decoration: underline;
