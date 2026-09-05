@@ -6,7 +6,9 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
 import {
   PrivyProvider,
+  usePrivy,
   useSignupWithPasskey,
+  type User,
 } from '@privy-io/react-auth';
 import {
   Activity,
@@ -42,19 +44,32 @@ function PrivyOwnerRegistration({
   onComplete,
   onError,
 }: {
-  onComplete: () => void;
+  onComplete: (user: User) => void;
   onError: (error: unknown) => void;
 }) {
+  const { ready, authenticated, user } = usePrivy();
+  const completedRef = useRef(false);
   const { signupWithPasskey, state } = useSignupWithPasskey({
-    onComplete,
+    onComplete: ({ user: completedUser }) => {
+      completedRef.current = true;
+      onComplete(completedUser);
+    },
   });
   const isBusy = [
     'generating-challenge',
     'awaiting-passkey',
     'submitting-response',
   ].includes(state.status);
+  useEffect(() => {
+    if (ready && authenticated && user && !completedRef.current) {
+      completedRef.current = true;
+      onComplete(user);
+    }
+  }, [authenticated, onComplete, ready, user]);
   const label =
-    state.status === 'awaiting-passkey'
+    !ready
+      ? 'Preparing passkey…'
+      : state.status === 'awaiting-passkey'
       ? 'Complete passkey'
       : state.status === 'submitting-response'
         ? 'Verifying passkey…'
@@ -73,7 +88,7 @@ function PrivyOwnerRegistration({
     <button
       className="mini-button"
       onClick={() => void handleClick()}
-      disabled={isBusy}
+      disabled={isBusy || !ready || authenticated}
       data-testid="button-register-owner"
     >
       <Fingerprint size={13} />
@@ -93,7 +108,10 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
   };
   type VerificationPhase = 'idle' | 'proof' | 'verify' | 'approved' | 'blocked';
 
-  const [ownerVerified, setOwnerVerified] = useState(false);
+  const [ownerIdentity, setOwnerIdentity] = useState<{ privyId: string } | null>(
+    null,
+  );
+  const ownerVerified = ownerIdentity !== null;
   const [delegationActive, setDelegationActive] = useState(false);
   const [selectedTier, setSelectedTier] = useState('elevated');
   const [verificationPhase, setVerificationPhase] =
@@ -123,13 +141,13 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
     ]);
   };
 
-  const registerOwner = () => {
+  const registerOwner = (user: User) => {
     if (ownerVerified) return;
-    setOwnerVerified(true);
+    setOwnerIdentity({ privyId: user.id });
     pushFeed({
       kind: 'success',
       title: 'Owner identity verified',
-      detail: 'Owner trust anchor established.',
+      detail: 'Passkey-authenticated owner trust anchor established.',
     });
   };
 
@@ -209,7 +227,6 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
   const resetFlow = () => {
     timers.current.forEach((timer) => clearTimeout(timer));
     timers.current = [];
-    setOwnerVerified(false);
     setDelegationActive(false);
     setSelectedTier('elevated');
     setVerificationPhase('idle');
@@ -218,7 +235,9 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         id: 'reset',
         kind: 'info',
         title: 'Trust flow reset',
-        detail: 'Trust state cleared. Ready for another run.',
+        detail: ownerVerified
+          ? 'Delegation and action state cleared. Owner identity remains verified.'
+          : 'Trust state cleared. Ready for another run.',
         time: now(),
       },
     ]);
