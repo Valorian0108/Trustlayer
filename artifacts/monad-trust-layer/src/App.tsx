@@ -181,22 +181,22 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
     setVerificationPhase('proof');
     pushFeed({
       kind: 'pending',
-      title: 'Large purchase paused for proof',
-      detail: 'Generating an authorization proof before the action can proceed.',
+      title: 'Large purchase paused for demo proof',
+      detail: 'Generating a local proof simulation before the action can proceed.',
     });
     const proofTimer = setTimeout(() => {
       setVerificationPhase('verify');
       pushFeed({
         kind: 'pending',
-        title: 'Proof generated',
-        detail: 'Checking valid delegation with the verifier adapter.',
+        title: 'Demo proof generated',
+        detail: 'Simulating the verifier adapter; no chain transaction yet.',
       });
       const verifyTimer = setTimeout(() => {
         setVerificationPhase('approved');
         pushFeed({
           kind: 'success',
-          title: 'Large purchase approved',
-          detail: '$500 action · authorization verified.',
+          title: 'Large purchase approved in demo',
+          detail: '$500 action · simulated authorization path completed.',
         });
         const settleTimer = setTimeout(() => setVerificationPhase('idle'), 2400);
         timers.current.push(settleTimer);
@@ -292,10 +292,10 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
             <div className="top-actions">
               <div className="network-pill" data-testid="status-network">
                 <span className="live-dot" />
-                Monad testnet · target
+                Monad testnet · planned
               </div>
               <div className="status-pill" data-testid="status-authorization-layer">
-                <Radio size={11} /> Authorization layer
+                <Radio size={11} /> Authorization layer · demo mode
               </div>
             </div>
           </header>
@@ -306,7 +306,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
               <h1>
                 Let the stakes
                 <br />
-                decide the <em>friction.</em>
+                decide the <span className="headline-accent">friction.</span>
               </h1>
             </div>
             <p className="intro-copy">
@@ -507,7 +507,8 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
               <div className="proof-note" data-testid="text-proof-note">
                 <strong>What this proves:</strong> not who the owner is, but
                 that a valid owner authorization exists. The proof path is built
-                for Semaphore, a verifier contract, and Monad testnet.
+                for Semaphore, a verifier contract, and Monad testnet. Current
+                proof and chain steps are simulated in Demo mode.
               </div>
             </div>
 
@@ -515,7 +516,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
               <div className="panel-head">
                 <div className="panel-kicker">
                   <Activity size={14} />
-                  Live activity
+                  Activity feed
                 </div>
                 <span className="feed-count" data-testid="display-feed-count">
                   {feed.length}
@@ -551,7 +552,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
                 )}
               </div>
               <div className="feed-footer">
-                <span>Trust event stream</span>
+                <span>Demo trust event stream</span>
                 <button
                   className="reset-button"
                   onClick={resetFlow}
