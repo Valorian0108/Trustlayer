@@ -1184,6 +1184,32 @@ select:focus-visible {
   margin-top: 3px;
 }
 
+.feed-tx {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tx-label {
+  font-size: 9px;
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+
+.tx-link {
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  color: var(--accent);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.tx-link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
 .feed-time {
   color: var(--paper-muted);
   font-family: var(--app-font-mono);
