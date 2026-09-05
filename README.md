@@ -65,7 +65,7 @@ payments are the demo case, not the product. the actual deliverable is the verif
 
 ## website and demo flow
 
-the site is a single dashboard, not a multi-page product - everything a judge needs to see happens on one screen.
+the site is a single dashboard, not a multi-page product - 
 
 - setup panel - register owner button triggers the passkey flow (privy sdk). shows owner verified once done.
 - delegation panel - owner signs the one-time authorization (authorize agent up to tier). shows delegation status: active, tier, timestamp.
