@@ -118,9 +118,36 @@ The frontend is intentionally still the same single-screen console. New
 identity, contract, proof, and chain code should be added behind small
 integration seams rather than replacing the UI.
 
-## Last GitHub push
+## Current GitHub checkpoint
 
-The last successful push was commit
+The latest successful push is commit
+[`4999caf8`](https://github.com/Valorian0108/Trustlayer/commit/4999caf8606f2514ed498f24d1dc90be727534dc)
+on the `main` branch:
+
+> Start Privy owner identity phase
+
+That commit changed:
+
+- `artifacts/monad-trust-layer/src/App.tsx`
+  - Connected the existing owner-registration seam to Privy's
+    `ready`, `authenticated`, and `user` state.
+  - Restored the owner trust state when an authenticated passkey session is
+    already present.
+  - Stored the Privy subject locally for the next commitment step without
+    displaying it or writing it on-chain.
+  - Kept the existing single-screen layout and all existing delegation/action
+    UI.
+- `README.md`
+  - Added the project brief, implementation phases, deployment notes, and
+    current checkpoint journal.
+
+This is the current Phase 1 checkpoint. The next build phase is the delegation
+registry and verifier work; no smart contracts or Monad writes have been
+added yet.
+
+## Previous Hallmark push
+
+The previous successful push was commit
 [`f287faad`](https://github.com/Valorian0108/Trustlayer/commit/f287faad734b18002513415478378bda6662a2c1)
 on the `main` branch:
 
