@@ -5,7 +5,7 @@
   "installCommand": "pnpm install --frozen-lockfile",
   "devCommand": "PORT=5000 BASE_PATH=/ pnpm --filter @workspace/monad-trust-layer run dev",
   "env": {
-    "VITE_PRIVY_APP_ID": "cmtmwmkg7006s0cl2t83tjhxh",
+    "VITE_PRIVY_APP_ID": "cmtrqskxl00rc0cjiaso8qnzf",
     "VITE_DELEGATION_REGISTRY_ADDRESS": "0x088bc310c841fA5ed5b28F37050c3B419572b70d",
     "VITE_AUTHORIZATION_VERIFIER_ADDRESS": "0xEc1d82473aCC8AE1BC1F9B0D79C9dd8a2ee6cFaF"
   }
