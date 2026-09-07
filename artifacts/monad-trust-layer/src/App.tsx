@@ -264,8 +264,8 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         console.log('Sending delegation transaction:', txData);
         console.log('Wallet structure:', wallet);
 
-        // Use the Privy wallet's sendTransaction method
-        const tx = await wallet.sendTransaction(txData);
+        // Use the Privy wallet's sendTransaction method with proper type casting
+        const tx = await (wallet as any).sendTransaction(txData);
         
         console.log('Transaction sent successfully:', tx.hash);
         
@@ -276,18 +276,6 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
           detail: `Delegation committed to Monad testnet · up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}.`,
           transactionHash: tx.hash
         });
-        
-        if (result.success) {
-          setDelegationActive(true);
-          pushFeed({
-            kind: 'success',
-            title: 'Agent delegation created on-chain',
-            detail: `Delegation committed to Monad testnet · up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}.`,
-            transactionHash: result.transactionHash
-          });
-        } else {
-          throw new Error(result.error || 'Transaction failed');
-        }
       } catch (error) {
         console.error('Real transaction failed:', error);
         pushFeed({
@@ -369,8 +357,8 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
 
         console.log('Sending verification transaction:', txData);
 
-        // Use the Privy wallet's sendTransaction method
-        const tx = await wallet.sendTransaction(txData);
+        // Use the Privy wallet's sendTransaction method with proper type casting
+        const tx = await (wallet as any).sendTransaction(txData);
         
         console.log('Verification transaction sent successfully:', tx.hash);
         
