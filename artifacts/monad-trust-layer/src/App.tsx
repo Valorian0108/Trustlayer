@@ -287,7 +287,8 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
           to: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS,
           data: `0x${createDelegationSignature(agentAddress, tierValue, expiresAt)}`,
           chainId: 10143,
-          value: '0x0' // Explicitly set value to 0
+          value: '0x0', // Explicitly set value to 0
+          gas: '0x5208' // Add explicit gas limit (21000 in hex)
         };
 
         // Validate parameters before sending
