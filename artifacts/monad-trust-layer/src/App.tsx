@@ -37,7 +37,7 @@ import {
   useLocation,
   Router as WouterRouter,
 } from 'wouter';
-import { getContractAddresses, createDelegationWithPrivy, verifyAuthorizationWithPrivy, simulateContractCall } from './contracts';
+import { getContractAddresses, createDelegationWithPrivy, verifyAuthorizationWithPrivy } from './contracts';
 import { getMetaMaskAgentManager, createDelegationTransaction, createVerificationTransaction } from './metamask-agent';
 
 const queryClient = new QueryClient();
@@ -113,7 +113,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
   };
   type VerificationPhase = 'idle' | 'proof' | 'verify' | 'approved' | 'blocked';
 
-  const { ready, authenticated, user } = usePrivy();
+  const { ready, authenticated, user, wallets } = usePrivy();
   const [ownerIdentity, setOwnerIdentity] = useState<{ privyId: string } | null>(
     null,
   );
@@ -153,10 +153,10 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
 
   // Detect if we should use real transactions (when Privy wallet is available)
   useEffect(() => {
-    if (authenticated && contractsReady) {
+    if (authenticated && contractsReady && wallets && wallets.length > 0) {
       setUseRealTransactions(true);
     }
-  }, [authenticated, contractsReady]);
+  }, [authenticated, contractsReady, wallets]);
 
   // Initialize MetaMask agent manager
   const agentManager = getMetaMaskAgentManager();
@@ -244,19 +244,17 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         const expiresAt = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days from now
         const agentAddress = agentWallet?.address || '0x1234567890123456789012345678901234567890'; // Use real agent address if available
         
-        // Create a mock Privy instance for demo purposes
-        const mockPrivy = {
-          wallets: [{
-            sendTransaction: async (tx: any) => {
-              // In real implementation, this would use the actual Privy wallet
-              // For demo, we simulate a successful transaction
-              return { hash: '0x' + Math.random().toString(16).slice(2, 10) + '...' + Math.random().toString(16).slice(2, 6) };
-            }
-          }]
+        // Use the real Privy wallet
+        if (!wallets || wallets.length === 0) {
+          throw new Error('No Privy wallet available');
+        }
+        
+        const realPrivy = {
+          wallets: wallets
         };
         
         const result = await createDelegationWithPrivy(
-          mockPrivy,
+          realPrivy,
           agentAddress,
           tierValue,
           expiresAt
@@ -274,28 +272,18 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
           throw new Error(result.error || 'Transaction failed');
         }
       } catch (error) {
-        console.error('Real transaction failed, falling back to simulation:', error);
+        console.error('Real transaction failed:', error);
         pushFeed({
-          kind: 'info',
-          title: 'Using simulation mode',
-          detail: 'Real transaction unavailable, using demo simulation',
-        });
-        
-        // Fallback to simulation
-        setDelegationActive(true);
-        pushFeed({
-          kind: 'success',
-          title: 'Agent delegation active (simulation)',
-          detail: `Agent may act up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}.`,
+          kind: 'blocked',
+          title: 'Delegation transaction failed',
+          detail: error instanceof Error ? error.message : 'Unknown error occurred',
         });
       }
     } else {
-      // Fallback to local simulation
-      setDelegationActive(true);
       pushFeed({
-        kind: 'success',
-        title: 'Agent delegation active (simulation)',
-        detail: `Agent may act up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}.`,
+        kind: 'blocked',
+        title: 'Cannot create delegation',
+        detail: 'Privy wallet not available or contracts not configured',
       });
     }
   };
@@ -343,21 +331,24 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         });
         
         // Use Privy wallet for real verification
-        const mockPrivy = {
-          wallets: [{
-            sendTransaction: async (tx: any) => {
-              // In real implementation, this would use the actual Privy wallet
-              // For demo, we simulate a successful transaction
-              return { hash: '0x' + Math.random().toString(16).slice(2, 10) + '...' + Math.random().toString(16).slice(2, 6) };
-            }
-          }]
+        if (!wallets || wallets.length === 0) {
+          throw new Error('No Privy wallet available');
+        }
+        
+        const realPrivy = {
+          wallets: wallets
         };
         
+        // Generate realistic proof parameters for demo
+        const proofId = BigInt(Math.floor(Math.random() * 1000000));
+        const root = BigInt(Math.floor(Math.random() * 1000000));
+        const nullifierHash = BigInt(Math.floor(Math.random() * 1000000));
+        
         const result = await verifyAuthorizationWithPrivy(
-          mockPrivy,
-          BigInt(Math.floor(Math.random() * 1000000)),
-          BigInt(Math.floor(Math.random() * 1000000)),
-          BigInt(Math.floor(Math.random() * 1000000))
+          realPrivy,
+          proofId,
+          root,
+          nullifierHash
         );
         
         if (result.success) {
@@ -374,45 +365,20 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
           throw new Error(result.error || 'Verification failed');
         }
       } catch (error) {
-        console.error('Real verification failed, falling back to simulation:', error);
+        console.error('Real verification failed:', error);
+        setVerificationPhase('blocked');
         pushFeed({
-          kind: 'info',
-          title: 'Using simulation mode',
-          detail: 'Real verification unavailable, using demo simulation',
+          kind: 'blocked',
+          title: 'Verification transaction failed',
+          detail: error instanceof Error ? error.message : 'Unknown error occurred',
         });
-        
-        // Fallback to simulation
-        setVerificationPhase('approved');
-        pushFeed({
-          kind: 'success',
-          title: 'Large purchase approved (simulation)',
-          detail: '$500 action · simulated authorization path completed.',
-        });
-        
-        setTimeout(() => setVerificationPhase('idle'), 2400);
       }
     } else {
-      // Fallback to simulation
-      const proofTimer = setTimeout(() => {
-        setVerificationPhase('verify');
-        pushFeed({
-          kind: 'pending',
-          title: 'Demo proof generated',
-          detail: 'Simulating the verifier adapter; no chain transaction yet.',
-        });
-        const verifyTimer = setTimeout(() => {
-          setVerificationPhase('approved');
-          pushFeed({
-            kind: 'success',
-            title: 'Large purchase approved in demo',
-            detail: '$500 action · simulated authorization path completed.',
-          });
-          const settleTimer = setTimeout(() => setVerificationPhase('idle'), 2400);
-          timers.current.push(settleTimer);
-        }, 1200);
-        timers.current.push(verifyTimer);
-      }, 1050);
-      timers.current.push(proofTimer);
+      pushFeed({
+        kind: 'blocked',
+        title: 'Cannot verify authorization',
+        detail: 'Privy wallet not available or contracts not configured',
+      });
     }
   };
 
@@ -503,10 +469,10 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
             <div className="top-actions">
               <div className="network-pill" data-testid="status-network">
                 <span className="live-dot" />
-                Monad testnet · {useRealTransactions ? 'real transactions' : 'simulated'}
+                Monad testnet · real transactions
               </div>
               <div className="status-pill" data-testid="status-authorization-layer">
-                <Radio size={11} /> Authorization layer · {contractsReady ? (useRealTransactions ? 'Privy wallet ready' : 'simulation mode') : 'demo mode'}
+                <Radio size={11} /> Authorization layer · {contractsReady && useRealTransactions ? 'Privy wallet ready' : 'wallet not connected'}
               </div>
             </div>
           </header>
@@ -741,7 +707,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
               <div className="proof-note" data-testid="text-proof-note">
                 <strong>What this proves:</strong> not who the owner is, but
                 that a valid owner authorization exists. The proof path is built
-                for a verifier contract on Monad testnet. {useRealTransactions ? 'Privy wallet ready for real transactions.' : 'Current steps are simulated in Demo mode.'}
+                for a verifier contract on Monad testnet. Transactions are sent to real smart contracts.
               </div>
             </div>
 

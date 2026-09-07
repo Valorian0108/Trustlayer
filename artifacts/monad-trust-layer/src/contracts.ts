@@ -1,3 +1,15 @@
+import { ethers } from 'ethers';
+
+// Fallback simulation function for when Privy is not available
+export function simulateContractCall(type: 'delegation' | 'verification') {
+  return new Promise<{ success: boolean; transactionHash?: string }>((resolve) => {
+    setTimeout(() => {
+      const hash = '0x' + Math.random().toString(16).slice(2, 10) + '...' + Math.random().toString(16).slice(2, 6);
+      resolve({ success: true, transactionHash: hash });
+    }, 1500);
+  });
+}
+
 // Contract addresses from environment variables
 const DELEGATION_REGISTRY_ADDRESS = import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS;
 const AUTHORIZATION_VERIFIER_ADDRESS = import.meta.env.VITE_AUTHORIZATION_VERIFIER_ADDRESS;
@@ -48,7 +60,7 @@ interface PrivyInstance {
 
 // Function to create delegation using Privy wallet
 export async function createDelegationWithPrivy(
-  privy: PrivyInstance,
+  privy: any, // Accept any wallet structure from Privy
   agentAddress: string,
   tier: Tier,
   expiresAt: number
@@ -71,8 +83,12 @@ export async function createDelegationWithPrivy(
       chainId: MONAD_TESTNET_CHAIN_ID
     };
 
+    console.log('Sending delegation transaction:', txData);
+
     // Send transaction using Privy wallet
     const tx = await wallet.sendTransaction(txData);
+    
+    console.log('Transaction sent successfully:', tx.hash);
     
     return { 
       success: true, 
@@ -84,25 +100,25 @@ export async function createDelegationWithPrivy(
   }
 }
 
-// Helper function to encode the createDelegation function call
+// Helper function to encode the createDelegation function call using ethers.js
 function createDelegationSignature(agentAddress: string, tier: Tier, expiresAt: number): string {
-  // Simplified encoding for demo - in production use ethers.js encodeFunctionData
-  // Function selector for createDelegation(address,uint8,uint256)
-  const functionSelector = '0x' + 
-    // createDelegation(address,uint8,uint256) 
-    // keccak256('createDelegation(address,uint8,uint256)') -> first 4 bytes
-    'a4e9c3b8'; // Mock function selector
+  // Use ethers.js to properly encode the function call
+  const iface = new ethers.Interface([
+    'function createDelegation(address agent, uint8 tier, uint256 expiresAt) returns (uint256)'
+  ]);
   
-  // For demo purposes, return a realistic-looking hex string
-  return functionSelector + 
-    '0000000000000000000000001234567890123456789012345678901234567890' + // agent address
-    tier.toString(16).padStart(64, '0') + // tier
-    expiresAt.toString(16).padStart(64, '0'); // expiresAt
+  const encodedData = iface.encodeFunctionData('createDelegation', [
+    agentAddress,
+    tier,
+    expiresAt
+  ]);
+  
+  return encodedData.slice(2); // Remove '0x' prefix for consistency
 }
 
 // Function to verify authorization using Privy wallet
 export async function verifyAuthorizationWithPrivy(
-  privy: PrivyInstance,
+  privy: any, // Accept any wallet structure from Privy
   proofId: bigint,
   root: bigint,
   nullifierHash: bigint
@@ -123,7 +139,11 @@ export async function verifyAuthorizationWithPrivy(
       chainId: MONAD_TESTNET_CHAIN_ID
     };
 
+    console.log('Sending verification transaction:', txData);
+
     const tx = await wallet.sendTransaction(txData);
+    
+    console.log('Verification transaction sent successfully:', tx.hash);
     
     return { 
       success: true, 
@@ -135,28 +155,20 @@ export async function verifyAuthorizationWithPrivy(
   }
 }
 
-// Helper function to encode the verifyAuthorization function call
+// Helper function to encode the verifyAuthorization function call using ethers.js
 function verifyAuthorizationSignature(proofId: bigint, root: bigint, nullifierHash: bigint): string {
-  // Simplified encoding for demo - in production use ethers.js encodeFunctionData
-  // Function selector for verifyAuthorization(uint256,uint256,uint256)
-  const functionSelector = '0x' + 
-    // verifyAuthorization(uint256,uint256,uint256)
-    // keccak256('verifyAuthorization(uint256,uint256,uint256)') -> first 4 bytes
-    'e5f6g7h8'; // Mock function selector
+  // Use ethers.js to properly encode the function call
+  const iface = new ethers.Interface([
+    'function verifyAuthorization(uint256 proofId, uint256 root, uint256 nullifierHash) returns (bool)'
+  ]);
   
-  // For demo purposes, return a realistic-looking hex string
-  return functionSelector + 
-    proofId.toString(16).padStart(64, '0') + // proofId
-    root.toString(16).padStart(64, '0') + // root
-    nullifierHash.toString(16).padStart(64, '0'); // nullifierHash
+  const encodedData = iface.encodeFunctionData('verifyAuthorization', [
+    proofId,
+    root,
+    nullifierHash
+  ]);
+  
+  return encodedData.slice(2); // Remove '0x' prefix for consistency
 }
 
-// Fallback simulation function for when Privy is not available
-export function simulateContractCall(type: 'delegation' | 'verification') {
-  return new Promise<{ success: boolean; transactionHash?: string }>((resolve) => {
-    setTimeout(() => {
-      const hash = '0x' + Math.random().toString(16).slice(2, 10) + '...' + Math.random().toString(16).slice(2, 6);
-      resolve({ success: true, transactionHash: hash });
-    }, 1500);
-  });
-}
+
