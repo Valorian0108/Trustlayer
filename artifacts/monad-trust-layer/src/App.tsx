@@ -932,6 +932,9 @@ function App() {
                     createOnLogin: 'all-users',
                   },
                 },
+                appearance: {
+                  walletList: 'embedded', // Force embedded wallet only
+                },
               }}
             >
               {routedApp}
