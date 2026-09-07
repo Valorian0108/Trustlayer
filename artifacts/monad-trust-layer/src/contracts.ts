@@ -58,50 +58,20 @@ interface PrivyInstance {
   wallets: PrivyWallet[];
 }
 
-// Function to create delegation using Privy wallet
-export async function createDelegationWithPrivy(
-  privy: any, // Accept any wallet structure from Privy
-  agentAddress: string,
-  tier: Tier,
-  expiresAt: number
-): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
-  try {
-    if (!DELEGATION_REGISTRY_ADDRESS) {
-      return { success: false, error: 'DelegationRegistry address not configured' };
-    }
-
-    // Get wallet from Privy
-    const wallet = privy.wallets[0]; // Get the first wallet
-    if (!wallet) {
-      return { success: false, error: 'No wallet available' };
-    }
-
-    // Build the transaction data
-    const txData = {
-      to: DELEGATION_REGISTRY_ADDRESS,
-      data: `0x${createDelegationSignature(agentAddress, tier, expiresAt)}`,
-      chainId: MONAD_TESTNET_CHAIN_ID
-    };
-
-    console.log('Sending delegation transaction:', txData);
-
-    // Send transaction using Privy wallet
-    const tx = await wallet.sendTransaction(txData);
-    
-    console.log('Transaction sent successfully:', tx.hash);
-    
-    return { 
-      success: true, 
-      transactionHash: tx.hash 
-    };
-  } catch (error) {
-    console.error('Error creating delegation:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-  }
+// Type for actual Privy wallet from useWallets hook
+interface ActualPrivyWallet {
+  address: string;
+  walletClient: any; // The actual wallet client for transactions
 }
 
+interface ActualPrivyInstance {
+  wallets: ActualPrivyWallet[];
+}
+
+
+
 // Helper function to encode the createDelegation function call using ethers.js
-function createDelegationSignature(agentAddress: string, tier: Tier, expiresAt: number): string {
+export function createDelegationSignature(agentAddress: string, tier: Tier, expiresAt: number): string {
   // Use ethers.js to properly encode the function call
   const iface = new ethers.Interface([
     'function createDelegation(address agent, uint8 tier, uint256 expiresAt) returns (uint256)'
@@ -114,6 +84,17 @@ function createDelegationSignature(agentAddress: string, tier: Tier, expiresAt: 
   ]);
   
   return encodedData.slice(2); // Remove '0x' prefix for consistency
+}
+
+// Function to create delegation using Privy wallet (deprecated - now handled directly in App.tsx)
+export async function createDelegationWithPrivy(
+  privy: any,
+  agentAddress: string,
+  tier: Tier,
+  expiresAt: number
+): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
+  // This function is now handled directly in App.tsx
+  return { success: false, error: 'Use direct wallet.sendTransaction in App.tsx' };
 }
 
 // Function to verify authorization using Privy wallet
@@ -141,7 +122,17 @@ export async function verifyAuthorizationWithPrivy(
 
     console.log('Sending verification transaction:', txData);
 
-    const tx = await wallet.sendTransaction(txData);
+    // Handle different Privy wallet structures
+    let tx;
+    if (wallet.sendTransaction && typeof wallet.sendTransaction === 'function') {
+      // Direct sendTransaction method
+      tx = await wallet.sendTransaction(txData);
+    } else if (wallet.walletClient && wallet.walletClient.sendTransaction) {
+      // Wallet client approach
+      tx = await wallet.walletClient.sendTransaction(txData);
+    } else {
+      throw new Error('Wallet does not have sendTransaction method');
+    }
     
     console.log('Verification transaction sent successfully:', tx.hash);
     
@@ -156,7 +147,7 @@ export async function verifyAuthorizationWithPrivy(
 }
 
 // Helper function to encode the verifyAuthorization function call using ethers.js
-function verifyAuthorizationSignature(proofId: bigint, root: bigint, nullifierHash: bigint): string {
+export function verifyAuthorizationSignature(proofId: bigint, root: bigint, nullifierHash: bigint): string {
   // Use ethers.js to properly encode the function call
   const iface = new ethers.Interface([
     'function verifyAuthorization(uint256 proofId, uint256 root, uint256 nullifierHash) returns (bool)'
@@ -169,6 +160,17 @@ function verifyAuthorizationSignature(proofId: bigint, root: bigint, nullifierHa
   ]);
   
   return encodedData.slice(2); // Remove '0x' prefix for consistency
+}
+
+// Function to verify authorization using Privy wallet (deprecated - now handled directly in App.tsx)
+export async function verifyAuthorizationWithPrivy(
+  privy: any,
+  proofId: bigint,
+  root: bigint,
+  nullifierHash: bigint
+): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
+  // This function is now handled directly in App.tsx
+  return { success: false, error: 'Use direct wallet.sendTransaction in App.tsx' };
 }
 
 

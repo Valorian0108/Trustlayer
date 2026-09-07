@@ -38,7 +38,7 @@ import {
   useLocation,
   Router as WouterRouter,
 } from 'wouter';
-import { getContractAddresses, createDelegationWithPrivy, verifyAuthorizationWithPrivy } from './contracts';
+import { getContractAddresses, createDelegationSignature, verifyAuthorizationSignature } from './contracts';
 import { getMetaMaskAgentManager, createDelegationTransaction, createVerificationTransaction } from './metamask-agent';
 
 const queryClient = new QueryClient();
@@ -251,16 +251,31 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
           throw new Error('No Privy wallet available');
         }
         
-        const realPrivy = {
-          wallets: wallets
-        };
+        // Get the first wallet
+        const wallet = wallets[0];
         
-        const result = await createDelegationWithPrivy(
-          realPrivy,
-          agentAddress,
-          tierValue,
-          expiresAt
-        );
+        // Build the transaction data
+        const txData = {
+          to: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS,
+          data: `0x${createDelegationSignature(agentAddress, tierValue, expiresAt)}`,
+          chainId: 10143
+        };
+
+        console.log('Sending delegation transaction:', txData);
+        console.log('Wallet structure:', wallet);
+
+        // Use the Privy wallet's sendTransaction method
+        const tx = await wallet.sendTransaction(txData);
+        
+        console.log('Transaction sent successfully:', tx.hash);
+        
+        setDelegationActive(true);
+        pushFeed({
+          kind: 'success',
+          title: 'Agent delegation created on-chain',
+          detail: `Delegation committed to Monad testnet · up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}.`,
+          transactionHash: tx.hash
+        });
         
         if (result.success) {
           setDelegationActive(true);
@@ -337,35 +352,37 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
           throw new Error('No Privy wallet available');
         }
         
-        const realPrivy = {
-          wallets: wallets
-        };
+        // Get the first wallet
+        const wallet = wallets[0];
         
         // Generate realistic proof parameters for demo
         const proofId = BigInt(Math.floor(Math.random() * 1000000));
         const root = BigInt(Math.floor(Math.random() * 1000000));
         const nullifierHash = BigInt(Math.floor(Math.random() * 1000000));
         
-        const result = await verifyAuthorizationWithPrivy(
-          realPrivy,
-          proofId,
-          root,
-          nullifierHash
-        );
+        // Build the transaction data
+        const txData = {
+          to: import.meta.env.VITE_AUTHORIZATION_VERIFIER_ADDRESS,
+          data: `0x${verifyAuthorizationSignature(proofId, root, nullifierHash)}`,
+          chainId: 10143
+        };
+
+        console.log('Sending verification transaction:', txData);
+
+        // Use the Privy wallet's sendTransaction method
+        const tx = await wallet.sendTransaction(txData);
         
-        if (result.success) {
-          setVerificationPhase('approved');
-          pushFeed({
-            kind: 'success',
-            title: 'Large purchase approved',
-            detail: '$500 action · Authorization verified on Monad testnet',
-            transactionHash: result.transactionHash
-          });
-          
-          setTimeout(() => setVerificationPhase('idle'), 2400);
-        } else {
-          throw new Error(result.error || 'Verification failed');
-        }
+        console.log('Verification transaction sent successfully:', tx.hash);
+        
+        setVerificationPhase('approved');
+        pushFeed({
+          kind: 'success',
+          title: 'Large purchase approved',
+          detail: '$500 action · Authorization verified on Monad testnet',
+          transactionHash: tx.hash
+        });
+        
+        setTimeout(() => setVerificationPhase('idle'), 2400);
       } catch (error) {
         console.error('Real verification failed:', error);
         setVerificationPhase('blocked');
