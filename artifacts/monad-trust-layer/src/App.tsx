@@ -155,6 +155,10 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
     }
   }, []);
 
+  // Get explorer URL from contract config
+  const contractConfig = getContractAddresses();
+  const explorerUrl = contractConfig.explorer || 'https://testnet.monadscan.com';
+
   // Detect if we should use real transactions (when Privy wallet is available)
   useEffect(() => {
     if (authenticated && contractsReady && wallets && wallets.length > 0) {
@@ -764,7 +768,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
                           <div className="feed-tx">
                             <span className="tx-label">Transaction:</span>
                             <a 
-                              href={`https://testnet.monad.xyz/tx/${item.transactionHash}`}
+                              href={`${explorerUrl}/tx/${item.transactionHash}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="tx-link"

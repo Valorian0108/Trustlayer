@@ -17,6 +17,7 @@ const AUTHORIZATION_VERIFIER_ADDRESS = import.meta.env.VITE_AUTHORIZATION_VERIFI
 // Monad testnet configuration
 const MONAD_TESTNET_CHAIN_ID = 10143;
 const MONAD_TESTNET_RPC = 'https://testnet-rpc.monad.xyz';
+const MONAD_TESTNET_EXPLORER = 'https://testnet.monadscan.com';
 
 // Tier enum values
 export enum Tier {
@@ -31,6 +32,7 @@ export function getContractAddresses() {
     authorizationVerifier: AUTHORIZATION_VERIFIER_ADDRESS,
     chainId: MONAD_TESTNET_CHAIN_ID,
     rpc: MONAD_TESTNET_RPC,
+    explorer: MONAD_TESTNET_EXPLORER,
     contractsReady: Boolean(DELEGATION_REGISTRY_ADDRESS && AUTHORIZATION_VERIFIER_ADDRESS)
   };
 }
