@@ -9,6 +9,7 @@ import {
   usePrivy,
   useSignupWithPasskey,
   useWallets,
+  useSendTransaction,
   type User,
 } from '@privy-io/react-auth';
 import {
@@ -116,6 +117,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
 
   const { ready, authenticated, user } = usePrivy();
   const { wallets } = useWallets();
+  const { sendTransaction } = useSendTransaction();
   const [ownerIdentity, setOwnerIdentity] = useState<{ privyId: string } | null>(
     null,
   );
@@ -262,19 +264,22 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         };
 
         console.log('Sending delegation transaction:', txData);
-        console.log('Wallet structure:', wallet);
+        console.log('Wallet address:', wallet.address);
 
-        // Use the Privy wallet's sendTransaction method with proper type casting
-        const tx = await (wallet as any).sendTransaction(txData);
-        
-        console.log('Transaction sent successfully:', tx.hash);
+        // Use the proper Privy sendTransaction hook
+        const { hash } = await sendTransaction(txData, {
+          address: wallet.address,
+          uiOptions: { showWalletUIs: false } // Hide default UI
+        });
+
+        console.log('Transaction sent successfully:', hash);
         
         setDelegationActive(true);
         pushFeed({
           kind: 'success',
           title: 'Agent delegation created on-chain',
           detail: `Delegation committed to Monad testnet · up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}.`,
-          transactionHash: tx.hash
+          transactionHash: hash
         });
       } catch (error) {
         console.error('Real transaction failed:', error);
@@ -356,18 +361,22 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         };
 
         console.log('Sending verification transaction:', txData);
+        console.log('Wallet address:', wallet.address);
 
-        // Use the Privy wallet's sendTransaction method with proper type casting
-        const tx = await (wallet as any).sendTransaction(txData);
-        
-        console.log('Verification transaction sent successfully:', tx.hash);
+        // Use the proper Privy sendTransaction hook
+        const { hash } = await sendTransaction(txData, {
+          address: wallet.address,
+          uiOptions: { showWalletUIs: false } // Hide default UI
+        });
+
+        console.log('Verification transaction sent successfully:', hash);
         
         setVerificationPhase('approved');
         pushFeed({
           kind: 'success',
           title: 'Large purchase approved',
           detail: '$500 action · Authorization verified on Monad testnet',
-          transactionHash: tx.hash
+          transactionHash: hash
         });
         
         setTimeout(() => setVerificationPhase('idle'), 2400);
