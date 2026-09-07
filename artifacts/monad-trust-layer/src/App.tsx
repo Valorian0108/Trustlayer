@@ -294,6 +294,15 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         if (!agentAddress || agentAddress === '0x0000000000000000000000000000000000000000') {
           throw new Error('Invalid agent address');
         }
+        
+        console.log('=== ADDRESS VALIDATION DEBUG ===');
+        console.log('Agent address (from MetaMask):', agentAddress);
+        console.log('Owner address (from Privy):', wallet.address);
+        console.log('Agent lowercase:', agentAddress.toLowerCase());
+        console.log('Owner lowercase:', wallet.address.toLowerCase());
+        console.log('Are they equal?', agentAddress.toLowerCase() === wallet.address.toLowerCase());
+        console.log('=================================');
+        
         if (agentAddress.toLowerCase() === wallet.address.toLowerCase()) {
           throw new Error('Agent address must be different from owner address. Please use a different MetaMask account as the agent wallet.');
         }
