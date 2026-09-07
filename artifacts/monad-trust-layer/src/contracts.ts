@@ -75,17 +75,28 @@ interface ActualPrivyInstance {
 // Helper function to encode the createDelegation function call using ethers.js
 export function createDelegationSignature(agentAddress: string, tier: Tier, expiresAt: number): string {
   // Use ethers.js to properly encode the function call
+  // The contract signature is: createDelegation(address,uint8,uint256)
+  // where uint8 represents the Tier enum
   const iface = new ethers.Interface([
     'function createDelegation(address agent, uint8 tier, uint256 expiresAt) returns (uint256)'
   ]);
   
   const encodedData = iface.encodeFunctionData('createDelegation', [
     agentAddress,
-    tier,
+    tier, // Tier enum value (0, 1, or 2)
     expiresAt
   ]);
   
-  console.log('Encoded delegation data:', encodedData);
+  console.log('=== DELEGATION ENCODING DEBUG ===');
+  console.log('Function signature: createDelegation(address,uint8,uint256)');
+  console.log('Agent address:', agentAddress);
+  console.log('Tier:', tier, '(0=Basic, 1=Routine, 2=Elevated)');
+  console.log('Expires at:', expiresAt);
+  console.log('Encoded data:', encodedData);
+  console.log('Method selector:', encodedData.slice(0, 10));
+  console.log('Expected selector (from contract): 0x????????');
+  console.log('================================');
+  
   return encodedData.slice(2); // Remove '0x' prefix for consistency
 }
 

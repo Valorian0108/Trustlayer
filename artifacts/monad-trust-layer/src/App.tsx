@@ -273,9 +273,14 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
           value: '0x0' // Explicitly set value to 0
         };
 
+        console.log('=== TRANSACTION DEBUG ===');
         console.log('Sending delegation transaction:', txData);
         console.log('Wallet address:', wallet.address);
         console.log('Contract address:', import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS);
+        console.log('Agent address:', agentAddress);
+        console.log('Tier value:', tierValue);
+        console.log('Expires at:', expiresAt);
+        console.log('=========================');
 
         // Use the proper Privy sendTransaction hook
         try {
