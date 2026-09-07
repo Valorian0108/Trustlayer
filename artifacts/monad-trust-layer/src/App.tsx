@@ -924,7 +924,18 @@ function App() {
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
           {privyAppId ? (
-            <PrivyProvider appId={privyAppId}>{routedApp}</PrivyProvider>
+            <PrivyProvider
+              appId={privyAppId}
+              config={{
+                embeddedWallets: {
+                  ethereum: {
+                    createOnLogin: 'all-users',
+                  },
+                },
+              }}
+            >
+              {routedApp}
+            </PrivyProvider>
           ) : (
             routedApp
           )}
