@@ -280,6 +280,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         console.log('Agent address:', agentAddress);
         console.log('Tier value:', tierValue);
         console.log('Expires at:', expiresAt);
+        console.log('Current timestamp:', Math.floor(Date.now() / 1000));
         console.log('=========================');
 
         // Use the proper Privy sendTransaction hook
