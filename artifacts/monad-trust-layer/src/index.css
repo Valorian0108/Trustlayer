@@ -932,6 +932,24 @@ select:focus-visible {
   transform: none;
 }
 
+.mini-button.text-only {
+  background: transparent;
+  border: none;
+  color: var(--ink-soft);
+  padding: 4px 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mini-button.text-only:hover {
+  color: var(--destructive);
+  background: transparent;
+  border: none;
+  transform: none;
+}
+}
+
 .registration-gate {
   display: flex;
   align-items: center;

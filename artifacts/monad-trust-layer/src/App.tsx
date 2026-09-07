@@ -177,7 +177,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
       });
 
       const agent = await agentManager.connect();
-      
+
       if (agent) {
         setAgentWallet({ address: agent.address, connected: agent.connected });
         pushFeed({
@@ -196,6 +196,15 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         detail: error instanceof Error ? error.message : 'Unknown error',
       });
     }
+  };
+
+  const disconnectAgentWallet = () => {
+    setAgentWallet(null);
+    pushFeed({
+      kind: 'info',
+      title: 'Agent wallet disconnected',
+      detail: 'You can now connect a different MetaMask account',
+    });
   };
 
   useEffect(() => {
@@ -684,6 +693,13 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
                           <span>{agentWallet.address.slice(0, 8)}...{agentWallet.address.slice(-4)}</span>
                         </div>
                         <Check className="status-check" size={16} />
+                        <button
+                          className="mini-button text-only"
+                          onClick={disconnectAgentWallet}
+                          title="Disconnect and switch to different wallet"
+                        >
+                          Disconnect
+                        </button>
                       </div>
                     )}
                     <div className="tier-row" role="group" aria-label="Delegation tier">
