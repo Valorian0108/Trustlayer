@@ -8,6 +8,7 @@ import {
   PrivyProvider,
   usePrivy,
   useSignupWithPasskey,
+  useWallets,
   type User,
 } from '@privy-io/react-auth';
 import {
@@ -113,7 +114,8 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
   };
   type VerificationPhase = 'idle' | 'proof' | 'verify' | 'approved' | 'blocked';
 
-  const { ready, authenticated, user, wallets } = usePrivy();
+  const { ready, authenticated, user } = usePrivy();
+  const { wallets } = useWallets();
   const [ownerIdentity, setOwnerIdentity] = useState<{ privyId: string } | null>(
     null,
   );
