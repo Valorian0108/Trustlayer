@@ -284,6 +284,14 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
             uiOptions: { showWalletUIs: false } // Hide default UI
           });
           console.log('Transaction hash:', hash);
+          
+          setDelegationActive(true);
+          pushFeed({
+            kind: 'success',
+            title: 'Agent delegation created on-chain',
+            detail: `Delegation committed to Monad testnet · up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}.`,
+            transactionHash: hash
+          });
         } catch (txError) {
           console.error('Transaction failed with error:', txError);
           
@@ -298,18 +306,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
             detail: `Agent may act up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}. Contract interface mismatch detected - using simulation for demo reliability.`,
             transactionHash: simulatedHash
           });
-          return;
         }
-
-        console.log('Transaction sent successfully:', hash);
-        
-        setDelegationActive(true);
-        pushFeed({
-          kind: 'success',
-          title: 'Agent delegation created on-chain',
-          detail: `Delegation committed to Monad testnet · up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}.`,
-          transactionHash: hash
-        });
       } catch (error) {
         console.error('Real transaction failed:', error);
         pushFeed({
@@ -400,8 +397,17 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
             address: wallet.address,
             uiOptions: { showWalletUIs: false } // Hide default UI
           });
-
           console.log('Verification transaction sent successfully:', hash);
+          
+          setVerificationPhase('approved');
+          pushFeed({
+            kind: 'success',
+            title: 'Large purchase approved',
+            detail: '$500 action · Authorization verified on Monad testnet',
+            transactionHash: hash
+          });
+          
+          setTimeout(() => setVerificationPhase('idle'), 2400);
         } catch (txError) {
           console.error('Verification transaction failed:', txError);
           
@@ -418,18 +424,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
           });
           
           setTimeout(() => setVerificationPhase('idle'), 2400);
-          return;
         }
-        
-        setVerificationPhase('approved');
-        pushFeed({
-          kind: 'success',
-          title: 'Large purchase approved',
-          detail: '$500 action · Authorization verified on Monad testnet',
-          transactionHash: hash
-        });
-        
-        setTimeout(() => setVerificationPhase('idle'), 2400);
       } catch (error) {
         console.error('Real verification failed:', error);
         setVerificationPhase('blocked');
