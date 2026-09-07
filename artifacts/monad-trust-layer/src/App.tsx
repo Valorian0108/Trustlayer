@@ -141,9 +141,12 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Initialize contracts on mount
+  const [explorerUrl, setExplorerUrl] = useState('https://testnet.monadscan.com');
+  
   useEffect(() => {
     const contractConfig = getContractAddresses();
     setContractsReady(contractConfig.contractsReady);
+    setExplorerUrl(contractConfig.explorer || 'https://testnet.monadscan.com');
     
     if (contractConfig.contractsReady) {
       console.log('Contracts configured:', contractConfig);
@@ -153,14 +156,6 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         detail: `DelegationRegistry: ${contractConfig.delegationRegistry?.slice(0, 8)}... · Verifier ready`,
       });
     }
-  }, []);
-
-  // Get explorer URL from contract config (in useEffect to avoid duplication)
-  const [explorerUrl, setExplorerUrl] = useState('https://testnet.monadscan.com');
-  
-  useEffect(() => {
-    const contractConfig = getContractAddresses();
-    setExplorerUrl(contractConfig.explorer || 'https://testnet.monadscan.com');
   }, []);
 
   // Detect if we should use real transactions (when Privy wallet is available)
@@ -364,6 +359,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         const wallet = wallets[0];
         
         // Generate realistic proof parameters for demo
+        // Note: In production, these would come from actual ZK proof generation
         const proofId = BigInt(Math.floor(Math.random() * 1000000));
         const root = BigInt(Math.floor(Math.random() * 1000000));
         const nullifierHash = BigInt(Math.floor(Math.random() * 1000000));
