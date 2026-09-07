@@ -333,6 +333,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
           console.log('Transaction result:', result);
           const hash = result.hash;
           console.log('Transaction hash:', hash);
+          console.log('Check transaction on MonadScan:', `https://testnet.monadscan.com/tx/${hash}`);
           
           setDelegationActive(true);
           pushFeed({
