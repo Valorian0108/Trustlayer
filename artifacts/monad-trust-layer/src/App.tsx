@@ -250,7 +250,13 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         // Use Privy wallet for real transaction
         const tierValue = selectedTier === 'elevated' ? 2 : selectedTier === 'routine' ? 1 : 0;
         const expiresAt = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days from now
-        const agentAddress = agentWallet?.address || '0x1234567890123456789012345678901234567890'; // Use real agent address if available
+        
+        // Require agent wallet to be connected
+        if (!agentWallet || !agentWallet.address) {
+          throw new Error('Agent wallet must be connected before creating delegation');
+        }
+        
+        const agentAddress = agentWallet.address;
         
         // Use the real Privy wallet
         if (!wallets || wallets.length === 0) {
@@ -264,7 +270,8 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         const txData = {
           to: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS,
           data: `0x${createDelegationSignature(agentAddress, tierValue, expiresAt)}`,
-          chainId: 10143
+          chainId: 10143,
+          value: '0x0' // Explicitly set value to 0
         };
 
         console.log('Sending delegation transaction:', txData);
@@ -361,7 +368,8 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         const txData = {
           to: import.meta.env.VITE_AUTHORIZATION_VERIFIER_ADDRESS,
           data: `0x${verifyAuthorizationSignature(proofId, root, nullifierHash)}`,
-          chainId: 10143
+          chainId: 10143,
+          value: '0x0' // Explicitly set value to 0
         };
 
         console.log('Sending verification transaction:', txData);

@@ -1,4 +1,5 @@
 // MetaMask Agent Wallet Integration for Monad Trust Layer
+import { ethers } from 'ethers';
 
 export interface MetaMaskAgent {
   address: string;
@@ -147,7 +148,7 @@ class MetaMaskAgentManager {
                 decimals: 18,
               },
               rpcUrls: [MONAD_TESTNET_RPC],
-              blockExplorerUrls: ['https://testnet.monad.xyz'],
+              blockExplorerUrls: ['https://testnet.monadscan.com'],
             }],
           });
         } else {
@@ -187,17 +188,20 @@ export function createDelegationTransaction(
   tier: number,
   expiresAt: number
 ): AgentTransaction {
-  // Simplified encoding - in production use proper ethers.js encoding
-  const functionSelector = '0xa4e9c3b8'; // createDelegation(address,uint8,uint256)
+  // Use ethers.js for proper encoding
+  const iface = new ethers.Interface([
+    'function createDelegation(address agent, uint8 tier, uint256 expiresAt) returns (uint256)'
+  ]);
   
-  const data = functionSelector + 
-    agentAddress.slice(2).padStart(64, '0') + // agent address (without 0x)
-    tier.toString(16).padStart(64, '0') + // tier
-    expiresAt.toString(16).padStart(64, '0'); // expiresAt
+  const encodedData = iface.encodeFunctionData('createDelegation', [
+    agentAddress,
+    tier,
+    expiresAt
+  ]);
 
   return {
     to: delegationRegistryAddress,
-    data: data,
+    data: encodedData,
     value: '0x0'
   };
 }
@@ -209,17 +213,20 @@ export function createVerificationTransaction(
   root: bigint,
   nullifierHash: bigint
 ): AgentTransaction {
-  // Simplified encoding - in production use proper ethers.js encoding
-  const functionSelector = '0xe5f6g7h8'; // verifyAuthorization(uint256,uint256,uint256)
+  // Use ethers.js for proper encoding
+  const iface = new ethers.Interface([
+    'function verifyAuthorization(uint256 proofId, uint256 root, uint256 nullifierHash) returns (bool)'
+  ]);
   
-  const data = functionSelector + 
-    proofId.toString(16).padStart(64, '0') + // proofId
-    root.toString(16).padStart(64, '0') + // root
-    nullifierHash.toString(16).padStart(64, '0'); // nullifierHash
+  const encodedData = iface.encodeFunctionData('verifyAuthorization', [
+    proofId,
+    root,
+    nullifierHash
+  ]);
 
   return {
     to: verifierAddress,
-    data: data,
+    data: encodedData,
     value: '0x0'
   };
 }
