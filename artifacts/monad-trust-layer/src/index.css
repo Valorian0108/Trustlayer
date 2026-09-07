@@ -1145,6 +1145,7 @@ select:focus-visible {
   padding: 15px 0;
   border-bottom: 1px solid var(--line);
   animation: feed-in 300ms ease both;
+  overflow: hidden;
 }
 
 .feed-item:last-child {
@@ -1182,6 +1183,9 @@ select:focus-visible {
   font-size: 10px;
   line-height: 1.45;
   margin-top: 3px;
+  overflow: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .feed-tx {
@@ -1203,6 +1207,10 @@ select:focus-visible {
   color: var(--accent);
   text-decoration: none;
   transition: color 0.15s ease;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-all;
+  max-width: 100%;
 }
 
 .agent-wallet-row {
