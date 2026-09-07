@@ -285,6 +285,9 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         if (!agentAddress || agentAddress === '0x0000000000000000000000000000000000000000') {
           throw new Error('Invalid agent address');
         }
+        if (agentAddress.toLowerCase() === wallet.address.toLowerCase()) {
+          throw new Error('Agent address must be different from owner address. Please use a different MetaMask account as the agent wallet.');
+        }
         if (expiresAt <= Math.floor(Date.now() / 1000)) {
           throw new Error('Expiry time must be in the future');
         }
