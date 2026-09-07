@@ -85,6 +85,7 @@ export function createDelegationSignature(agentAddress: string, tier: Tier, expi
     expiresAt
   ]);
   
+  console.log('Encoded delegation data:', encodedData);
   return encodedData.slice(2); // Remove '0x' prefix for consistency
 }
 
