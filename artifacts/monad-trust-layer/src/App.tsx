@@ -155,9 +155,13 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
     }
   }, []);
 
-  // Get explorer URL from contract config
-  const contractConfig = getContractAddresses();
-  const explorerUrl = contractConfig.explorer || 'https://testnet.monadscan.com';
+  // Get explorer URL from contract config (in useEffect to avoid duplication)
+  const [explorerUrl, setExplorerUrl] = useState('https://testnet.monadscan.com');
+  
+  useEffect(() => {
+    const contractConfig = getContractAddresses();
+    setExplorerUrl(contractConfig.explorer || 'https://testnet.monadscan.com');
+  }, []);
 
   // Detect if we should use real transactions (when Privy wallet is available)
   useEffect(() => {
