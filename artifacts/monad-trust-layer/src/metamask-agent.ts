@@ -38,7 +38,7 @@ class MetaMaskAgentManager {
 
       const ethereum = (window as any).ethereum;
       if (!ethereum) {
-        throw new Error('MetaMask not installed');
+        throw new Error('No EVM wallet detected. Please install MetaMask, Rabby, or another EVM wallet.');
       }
 
       const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
@@ -64,7 +64,7 @@ class MetaMaskAgentManager {
 
       return null;
     } catch (error) {
-      console.error('MetaMask connection failed:', error);
+      console.error('EVM wallet connection failed:', error);
       return null;
     }
   }
@@ -85,7 +85,7 @@ class MetaMaskAgentManager {
 
       const ethereum = (window as any).ethereum;
       if (!ethereum) {
-        return { success: false, error: 'MetaMask not available' };
+        return { success: false, error: 'EVM wallet not available' };
       }
 
       const txHash = await ethereum.request({
