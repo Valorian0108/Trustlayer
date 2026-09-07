@@ -266,9 +266,9 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         const wallet = wallets[0];
         
         console.log('=== WALLET DEBUG ===');
-        console.log('Available wallets:', wallets.map(w => ({ address: w.address, hasWalletClient: !!w.walletClient })));
+        console.log('Available wallets:', wallets.map(w => ({ address: w.address, walletClientType: w.walletClientType })));
         console.log('Selected wallet address:', wallet.address);
-        console.log('Wallet has walletClient:', !!wallet.walletClient);
+        console.log('Wallet client type:', wallet.walletClientType);
         console.log('Contract deployer address:', '0x56C9a37F08035a440581C3ebeDf7dE3A6Ff4e60F');
         console.log('Is selected wallet the contract deployer?', wallet.address.toLowerCase() === '0x56c9a37f08035a440581c3ebedf7de3a6ff4e60f');
         console.log('===================');
