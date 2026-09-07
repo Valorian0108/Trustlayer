@@ -34,7 +34,7 @@ payments are the demo case, not the product. the actual deliverable is the verif
 - monad testnet - deployment target, fits no-funds constraint
 - privy - passkey-based account creation, no seed phrase
 - delegationregistry contract - on-chain delegation storage (deployed)
-- authorizationverifier contract - privacy-preserving verification (deployed)
+- authorizationverifier contract - anonymous-proof interface (merkle root + nullifier hash), simplified verifier standing in for full proof-checking for now (deployed)
 - react + vite - frontend framework
 - metamask integration - agent wallet infrastructure
 
@@ -56,9 +56,12 @@ payments are the demo case, not the product. the actual deliverable is the verif
 - vercel deployment configuration
 - comprehensive documentation
 
+### next up
+- full cryptographic proof generation and verification (the verifier's root + nullifier interface is already in the right shape for this; the proof-checking logic itself is the remaining piece)
+
 ### architecture details
 - dual-wallet system: privy for human owner, metamask for agent execution
-- privacy-preserving authorization verification
+- anonymous-proof authorization architecture (merkle root + nullifier), simplified verifier for now
 - on-chain delegation storage and management
 - real blockchain transaction infrastructure
 - professional error handling and fallback modes
@@ -84,6 +87,10 @@ first, the owner registers with a passkey - no seed phrase, just their fingerpri
 what is the point:
 
 agents do not yet have the same judgment a person already has - nobody gets carded buying coffee, but they do for a big purchase. this gives agents that instinct.
+
+if asked specifically about the zk/privacy piece - say this upfront, do not wait to be asked:
+
+the verifier's interface - a merkle root plus a nullifier hash - is the real architecture for an anonymous membership proof, the same shape libraries like semaphore use. today it is a simplified verifier standing in for that; the actual cryptographic proof-checking is the next concrete step, not yet fully wired in. the delegation registry itself is a straightforward on-chain lookup right now, so the owner-agent link is visible on-chain - hiding it is exactly what the verifier upgrade solves.
 
 ## deployed contracts
 
