@@ -265,6 +265,13 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         // Get the first wallet
         const wallet = wallets[0];
         
+        console.log('=== WALLET DEBUG ===');
+        console.log('Available wallets:', wallets.map(w => w.address));
+        console.log('Selected wallet address:', wallet.address);
+        console.log('Contract deployer address:', '0x56C9a37F08035a440581C3ebeDf7dE3A6Ff4e60F');
+        console.log('Is selected wallet the contract deployer?', wallet.address.toLowerCase() === '0x56c9a37f08035a440581c3ebedf7de3a6ff4e60f');
+        console.log('===================');
+        
         // Build the transaction data
         const txData = {
           to: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS,
@@ -273,14 +280,24 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
           value: '0x0' // Explicitly set value to 0
         };
 
+        // Validate parameters before sending
+        if (!agentAddress || agentAddress === '0x0000000000000000000000000000000000000000') {
+          throw new Error('Invalid agent address');
+        }
+        if (expiresAt <= Math.floor(Date.now() / 1000)) {
+          throw new Error('Expiry time must be in the future');
+        }
+
         console.log('=== TRANSACTION DEBUG ===');
         console.log('Sending delegation transaction:', txData);
-        console.log('Wallet address:', wallet.address);
+        console.log('Privy wallet address:', wallet.address);
+        console.log('Is this the contract deployer?', wallet.address.toLowerCase() === '0x56c9a37f08035a440581c3ebedf7de3a6ff4e60f');
         console.log('Contract address:', import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS);
         console.log('Agent address:', agentAddress);
         console.log('Tier value:', tierValue);
         console.log('Expires at:', expiresAt);
         console.log('Current timestamp:', Math.floor(Date.now() / 1000));
+        console.log('Time until expiry:', expiresAt - Math.floor(Date.now() / 1000), 'seconds');
         console.log('=========================');
 
         // Use the proper Privy sendTransaction hook
