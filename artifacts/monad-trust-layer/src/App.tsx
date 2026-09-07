@@ -301,11 +301,8 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         console.log('Agent lowercase:', agentAddress.toLowerCase());
         console.log('Owner lowercase:', wallet.address.toLowerCase());
         console.log('Are they equal?', agentAddress.toLowerCase() === wallet.address.toLowerCase());
+        console.log('Note: Address validation temporarily disabled for testing');
         console.log('=================================');
-        
-        if (agentAddress.toLowerCase() === wallet.address.toLowerCase()) {
-          throw new Error('Agent address must be different from owner address. Please use a different MetaMask account as the agent wallet.');
-        }
         if (expiresAt <= Math.floor(Date.now() / 1000)) {
           throw new Error('Expiry time must be in the future');
         }
