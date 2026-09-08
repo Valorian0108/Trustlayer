@@ -179,12 +179,46 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
       const agent = await agentManager.connect();
 
       if (agent) {
-        setAgentWallet({ address: agent.address, connected: agent.connected });
-        pushFeed({
-          kind: 'success',
-          title: 'Agent wallet connected',
-          detail: `MetaMask agent wallet: ${agent.address.slice(0, 8)}...${agent.address.slice(-4)}`,
-        });
+        // Check if we need to switch to Monad testnet
+        const MONAD_TESTNET_CHAIN_ID = 10143;
+        if (agent.chainId !== MONAD_TESTNET_CHAIN_ID) {
+          pushFeed({
+            kind: 'pending',
+            title: 'Switching to Monad testnet',
+            detail: 'Current network is not Monad testnet. Switching...',
+          });
+
+          const switched = await agentManager.switchToMonadTestnet();
+          
+          if (switched) {
+            // Reconnect to get updated chain info
+            const updatedAgent = await agentManager.connect();
+            if (updatedAgent) {
+              setAgentWallet({ address: updatedAgent.address, connected: updatedAgent.connected });
+              pushFeed({
+                kind: 'success',
+                title: 'Agent wallet connected',
+                detail: `MetaMask agent wallet: ${updatedAgent.address.slice(0, 8)}...${updatedAgent.address.slice(-4)} · Monad testnet`,
+              });
+            } else {
+              throw new Error('Failed to reconnect after chain switch');
+            }
+          } else {
+            pushFeed({
+              kind: 'info',
+              title: 'Agent wallet connected (wrong network)',
+              detail: `MetaMask agent wallet: ${agent.address.slice(0, 8)}...${agent.address.slice(-4)} · Please switch to Monad testnet manually`,
+            });
+            setAgentWallet({ address: agent.address, connected: agent.connected });
+          }
+        } else {
+          setAgentWallet({ address: agent.address, connected: agent.connected });
+          pushFeed({
+            kind: 'success',
+            title: 'Agent wallet connected',
+            detail: `MetaMask agent wallet: ${agent.address.slice(0, 8)}...${agent.address.slice(-4)} · Monad testnet`,
+          });
+        }
       } else {
         throw new Error('Failed to connect agent wallet');
       }
@@ -249,6 +283,19 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
     // Try to use real contract if available
     if (contractsReady && useRealTransactions) {
       try {
+        // Check if agent wallet is on correct network
+        if (agentWallet) {
+          const currentAgent = agentManager.getAgent();
+          if (currentAgent && currentAgent.chainId !== 10143) {
+            pushFeed({
+              kind: 'blocked',
+              title: 'Wrong network',
+              detail: 'Agent wallet must be on Monad testnet (chain ID 10143). Please switch network in your wallet.',
+            });
+            return;
+          }
+        }
+
         pushFeed({
           kind: 'pending',
           title: 'Creating on-chain delegation',
@@ -377,6 +424,20 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
     
     if (contractsReady && useRealTransactions) {
       try {
+        // Check if agent wallet is on correct network
+        if (agentWallet) {
+          const currentAgent = agentManager.getAgent();
+          if (currentAgent && currentAgent.chainId !== 10143) {
+            pushFeed({
+              kind: 'blocked',
+              title: 'Wrong network',
+              detail: 'Agent wallet must be on Monad testnet (chain ID 10143). Please switch network in your wallet.',
+            });
+            setVerificationPhase('blocked');
+            return;
+          }
+        }
+
         // Simulate proof generation
         await new Promise(resolve => setTimeout(resolve, 1500));
         
