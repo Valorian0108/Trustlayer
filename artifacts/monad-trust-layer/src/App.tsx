@@ -118,6 +118,18 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
   const { ready, authenticated, user } = usePrivy();
   const { wallets } = useWallets();
   const { sendTransaction } = useSendTransaction();
+  
+  // Debug Privy wallet availability
+  useEffect(() => {
+    console.log('Privy state:', {
+      ready,
+      authenticated,
+      user: user?.id,
+      wallets: wallets?.length,
+      walletAddresses: wallets?.map(w => w.address),
+      userWallets: user?.linkedAccounts
+    });
+  }, [ready, authenticated, user, wallets]);
   const [ownerIdentity, setOwnerIdentity] = useState<{ privyId: string } | null>(
     null,
   );
@@ -160,8 +172,23 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
 
   // Detect if we should use real transactions (when Privy wallet is available)
   useEffect(() => {
+    console.log('Privy wallet detection:', {
+      authenticated,
+      contractsReady,
+      walletsAvailable: wallets && wallets.length > 0,
+      walletsCount: wallets?.length,
+      walletAddresses: wallets?.map(w => w.address)
+    });
+    
     if (authenticated && contractsReady && wallets && wallets.length > 0) {
       setUseRealTransactions(true);
+      console.log('Real transactions enabled - Privy wallet detected');
+    } else {
+      console.log('Real transactions disabled - missing requirements:', {
+        authenticated,
+        contractsReady,
+        hasWallets: wallets && wallets.length > 0
+      });
     }
   }, [authenticated, contractsReady, wallets]);
 
@@ -402,10 +429,16 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         }, 2000);
       }
     } else {
+      // Provide more specific error message based on what's missing
+      const missingReqs = [];
+      if (!authenticated) missingReqs.push('owner not authenticated');
+      if (!contractsReady) missingReqs.push('contracts not configured');
+      if (!wallets || wallets.length === 0) missingReqs.push('Privy wallet not available');
+      
       pushFeed({
         kind: 'blocked',
         title: 'Cannot create delegation',
-        detail: 'Privy wallet not available or contracts not configured',
+        detail: `Missing requirements: ${missingReqs.join(', ')}. Please complete setup first.`,
       });
     }
   };
@@ -556,10 +589,16 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         });
       }
     } else {
+      // Provide more specific error message based on what's missing
+      const missingReqs = [];
+      if (!authenticated) missingReqs.push('owner not authenticated');
+      if (!contractsReady) missingReqs.push('contracts not configured');
+      if (!wallets || wallets.length === 0) missingReqs.push('Privy wallet not available');
+      
       pushFeed({
         kind: 'blocked',
         title: 'Cannot verify authorization',
-        detail: 'Privy wallet not available or contracts not configured',
+        detail: `Missing requirements: ${missingReqs.join(', ')}. Please complete setup first.`,
       });
     }
   };
@@ -723,6 +762,11 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
                         <div className="identity-text">
                           Verified owner
                           <span>passkey identity</span>
+                          {wallets && wallets.length > 0 ? (
+                            <span style={{color: '#22c55e', fontSize: '11px'}}>· Privy wallet ready</span>
+                          ) : (
+                            <span style={{color: '#f59e0b', fontSize: '11px'}}>· Privy wallet not detected</span>
+                          )}
                         </div>
                         <Check className="status-check" size={16} />
                       </div>
