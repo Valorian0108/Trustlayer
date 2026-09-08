@@ -401,6 +401,10 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
       
       // Note: In dual-wallet architecture, owner (Privy) and agent (MetaMask) addresses should be different
       // This is by design - the owner authorizes the agent to act on their behalf
+      if (wallet.address.toLowerCase() === agentAddress.toLowerCase()) {
+        throw new Error('Owner and agent addresses are the same - they must be different wallets. Please connect a different MetaMask account as the agent wallet.');
+      }
+      
       if (expiresAt <= Math.floor(Date.now() / 1000)) {
         throw new Error('Expiry time must be in the future');
       }
