@@ -285,6 +285,14 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
   const registerOwner = (user: User) => {
     if (ownerVerified) return;
     setOwnerIdentity({ privyId: user.id });
+    
+    // Check if Privy wallet address is different from potential agent wallet
+    if (wallets && wallets.length > 0) {
+      const privyAddress = wallets[0].address;
+      console.log('Privy wallet address:', privyAddress);
+      console.log('This should be different from your MetaMask agent wallet address');
+    }
+    
     pushFeed({
       kind: 'success',
       title: 'Owner identity verified',
@@ -402,7 +410,12 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
       // Note: In dual-wallet architecture, owner (Privy) and agent (MetaMask) addresses should be different
       // This is by design - the owner authorizes the agent to act on their behalf
       if (wallet.address.toLowerCase() === agentAddress.toLowerCase()) {
-        throw new Error('Owner and agent addresses are the same - they must be different wallets. Please connect a different MetaMask account as the agent wallet.');
+        console.error('CRITICAL: Owner and agent have the same address:', wallet.address);
+        console.error('This indicates Privy is using the same address as your MetaMask wallet.');
+        console.error('For dual-wallet architecture to work, you need to:');
+        console.error('1. Clear your Privy session (logout and re-register)');
+        console.error('2. Or ensure Privy creates its own embedded wallet (not syncing with MetaMask)');
+        throw new Error('Owner and agent addresses are the same - this breaks dual-wallet architecture. Privy is likely syncing with your MetaMask wallet instead of creating its own embedded wallet. Try logging out of Privy and re-registering with passkey to get a different embedded wallet address.');
       }
       
       if (expiresAt <= Math.floor(Date.now() / 1000)) {
@@ -1112,6 +1125,9 @@ function App() {
                   ethereum: {
                     createOnLogin: 'all-users',
                   },
+                },
+                appearance: {
+                  walletList: 'none', // Don't show external wallet list
                 },
               }}
             >
