@@ -404,13 +404,6 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
             });
           }, 2000);
         }
-      } catch (error) {
-        console.error('Real transaction failed:', error);
-        pushFeed({
-          kind: 'blocked',
-          title: 'Delegation transaction failed',
-          detail: error instanceof Error ? error.message : 'Unknown error occurred',
-        });
       }
     } else {
       pushFeed({
@@ -553,10 +546,9 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
               detail: '$500 action · Using simulation for demo reliability.',
               transactionHash: simulatedHash
             });
+            
+            setTimeout(() => setVerificationPhase('idle'), 2400);
           }, 2000);
-        }
-          
-          setTimeout(() => setVerificationPhase('idle'), 2400);
         }
       } catch (error) {
         console.error('Real verification failed:', error);
