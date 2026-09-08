@@ -366,8 +366,20 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
       };
 
       // Validate parameters before sending
+      console.log('Validating transaction parameters:', {
+        agentAddress,
+        ownerAddress: wallet.address,
+        tierValue,
+        expiresAt,
+        currentTime: Math.floor(Date.now() / 1000)
+      });
+      
       if (!agentAddress || agentAddress === '0x0000000000000000000000000000000000000000') {
-        throw new Error('Invalid agent address');
+        throw new Error('Invalid agent address - cannot be zero address');
+      }
+      
+      if (wallet.address === '0x0000000000000000000000000000000000000000') {
+        throw new Error('Invalid owner address - Privy wallet address is zero');
       }
       
       // Note: In dual-wallet architecture, owner (Privy) and agent (MetaMask) addresses should be different
@@ -375,15 +387,24 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
       if (expiresAt <= Math.floor(Date.now() / 1000)) {
         throw new Error('Expiry time must be in the future');
       }
+      
+      // Additional validation: check if tier value is valid (0, 1, or 2)
+      if (tierValue < 0 || tierValue > 2) {
+        throw new Error('Invalid tier value - must be 0 (Basic), 1 (Routine), or 2 (Elevated)');
+      }
+      
+      console.log('All validations passed, proceeding with transaction');
 
       // Use the proper Privy sendTransaction hook
       try {
+        console.log('Attempting transaction with params:', txData);
         const result = await sendTransaction(txData, {
           address: wallet.address,
           uiOptions: { showWalletUIs: false } // Hide default UI
         });
         
         const hash = result.hash;
+        console.log('Transaction successful:', hash);
         
         setDelegationActive(true);
         pushFeed({
@@ -394,18 +415,32 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         });
       } catch (txError) {
         console.error('Transaction failed with error:', txError);
+        console.error('Error details:', {
+          message: txError instanceof Error ? txError.message : 'Unknown error',
+          stack: txError instanceof Error ? txError.stack : undefined,
+          cause: txError instanceof Error ? txError.cause : undefined
+        });
         
         // Try to extract more detailed error information
         let errorMessage = 'Unknown error occurred';
         if (txError instanceof Error) {
           errorMessage = txError.message;
-          // Check for common contract errors
-          if (errorMessage.includes('execution reverted')) {
-            errorMessage = 'Contract execution reverted - check contract parameters and ensure sufficient gas';
+          
+          // Check for specific contract revert reasons
+          if (errorMessage.includes('Invalid agent address')) {
+            errorMessage = 'Invalid agent address - the agent address cannot be zero';
+          } else if (errorMessage.includes('Invalid owner address')) {
+            errorMessage = 'Invalid owner address - the owner address cannot be zero';
+          } else if (errorMessage.includes('Expiry must be in the future')) {
+            errorMessage = 'Expiry time must be in the future';
+          } else if (errorMessage.includes('execution reverted')) {
+            errorMessage = 'Contract execution reverted - check contract parameters';
           } else if (errorMessage.includes('insufficient funds')) {
             errorMessage = 'Insufficient funds for transaction';
           } else if (errorMessage.includes('nonce')) {
             errorMessage = 'Transaction nonce issue - please try again';
+          } else if (errorMessage.includes('gas')) {
+            errorMessage = 'Gas estimation failed - transaction might revert';
           }
         }
         
