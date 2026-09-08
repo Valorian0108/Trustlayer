@@ -282,128 +282,124 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
     
     // Try to use real contract if available
     if (contractsReady && useRealTransactions) {
+      // Check if agent wallet is on correct network
+      if (agentWallet) {
+        const currentAgent = agentManager.getAgent();
+        if (currentAgent && currentAgent.chainId !== 10143) {
+          pushFeed({
+            kind: 'blocked',
+            title: 'Wrong network',
+            detail: 'Agent wallet must be on Monad testnet (chain ID 10143). Please switch network in your wallet.',
+          });
+          return;
+        }
+      }
+
+      pushFeed({
+        kind: 'pending',
+        title: 'Creating on-chain delegation',
+        detail: 'Sending delegation transaction to Monad testnet via Privy wallet...',
+      });
+      
+      // Use Privy wallet for real transaction
+      const tierValue = selectedTier === 'elevated' ? 2 : selectedTier === 'routine' ? 1 : 0;
+      const expiresAt = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days from now
+      
+      // Require agent wallet to be connected
+      if (!agentWallet || !agentWallet.address) {
+        throw new Error('Agent wallet must be connected before creating delegation');
+      }
+      
+      const agentAddress = agentWallet.address;
+      
+      // Use the real Privy wallet
+      if (!wallets || wallets.length === 0) {
+        throw new Error('No Privy wallet available');
+      }
+      
+      // Get the first wallet
+      const wallet = wallets[0];
+      
+      console.log('Transaction parameters:', {
+        owner: wallet.address,
+        agent: agentAddress,
+        tier: tierValue,
+        expiresAt: expiresAt,
+        currentTimestamp: Math.floor(Date.now() / 1000),
+        contractAddress: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS
+      });
+      
+      // Build the transaction data
+      const txData = {
+        to: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS,
+        data: `0x${createDelegationSignature(agentAddress, tierValue, expiresAt)}`,
+        chainId: 10143,
+        value: '0x0', // Explicitly set value to 0
+        gas: '0x186A0' // Add gas limit (100,000 in hex) to ensure sufficient gas for contract execution
+      };
+
+      // Validate parameters before sending
+      if (!agentAddress || agentAddress === '0x0000000000000000000000000000000000000000') {
+        throw new Error('Invalid agent address');
+      }
+      
+      // Note: In dual-wallet architecture, owner (Privy) and agent (MetaMask) addresses should be different
+      // This is by design - the owner authorizes the agent to act on their behalf
+      if (expiresAt <= Math.floor(Date.now() / 1000)) {
+        throw new Error('Expiry time must be in the future');
+      }
+
+      // Use the proper Privy sendTransaction hook
       try {
-        // Check if agent wallet is on correct network
-        if (agentWallet) {
-          const currentAgent = agentManager.getAgent();
-          if (currentAgent && currentAgent.chainId !== 10143) {
-            pushFeed({
-              kind: 'blocked',
-              title: 'Wrong network',
-              detail: 'Agent wallet must be on Monad testnet (chain ID 10143). Please switch network in your wallet.',
-            });
-            return;
+        const result = await sendTransaction(txData, {
+          address: wallet.address,
+          uiOptions: { showWalletUIs: false } // Hide default UI
+        });
+        
+        const hash = result.hash;
+        
+        setDelegationActive(true);
+        pushFeed({
+          kind: 'success',
+          title: 'Agent delegation created on-chain',
+          detail: `Delegation committed to Monad testnet · up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}.`,
+          transactionHash: hash
+        });
+      } catch (txError) {
+        console.error('Transaction failed with error:', txError);
+        
+        // Try to extract more detailed error information
+        let errorMessage = 'Unknown error occurred';
+        if (txError instanceof Error) {
+          errorMessage = txError.message;
+          // Check for common contract errors
+          if (errorMessage.includes('execution reverted')) {
+            errorMessage = 'Contract execution reverted - check contract parameters and ensure sufficient gas';
+          } else if (errorMessage.includes('insufficient funds')) {
+            errorMessage = 'Insufficient funds for transaction';
+          } else if (errorMessage.includes('nonce')) {
+            errorMessage = 'Transaction nonce issue - please try again';
           }
         }
-
+        
         pushFeed({
-          kind: 'pending',
-          title: 'Creating on-chain delegation',
-          detail: 'Sending delegation transaction to Monad testnet via Privy wallet...',
+          kind: 'blocked',
+          title: 'Delegation transaction failed',
+          detail: errorMessage,
         });
         
-        // Use Privy wallet for real transaction
-        const tierValue = selectedTier === 'elevated' ? 2 : selectedTier === 'routine' ? 1 : 0;
-        const expiresAt = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days from now
-        
-        // Require agent wallet to be connected
-        if (!agentWallet || !agentWallet.address) {
-          throw new Error('Agent wallet must be connected before creating delegation');
-        }
-        
-        const agentAddress = agentWallet.address;
-        
-        // Use the real Privy wallet
-        if (!wallets || wallets.length === 0) {
-          throw new Error('No Privy wallet available');
-        }
-        
-        // Get the first wallet
-        const wallet = wallets[0];
-        
-        console.log('Transaction parameters:', {
-          owner: wallet.address,
-          agent: agentAddress,
-          tier: tierValue,
-          expiresAt: expiresAt,
-          currentTimestamp: Math.floor(Date.now() / 1000),
-          contractAddress: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS
-        });
-        
-        // Build the transaction data
-        const txData = {
-          to: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS,
-          data: `0x${createDelegationSignature(agentAddress, tierValue, expiresAt)}`,
-          chainId: 10143,
-          value: '0x0', // Explicitly set value to 0
-          gas: '0x186A0' // Add gas limit (100,000 in hex) to ensure sufficient gas for contract execution
-        };
-
-        // Validate parameters before sending
-        if (!agentAddress || agentAddress === '0x0000000000000000000000000000000000000000') {
-          throw new Error('Invalid agent address');
-        }
-        
-        // Note: In dual-wallet architecture, owner (Privy) and agent (MetaMask) addresses should be different
-        // This is by design - the owner authorizes the agent to act on their behalf
-        if (expiresAt <= Math.floor(Date.now() / 1000)) {
-          throw new Error('Expiry time must be in the future');
-        }
-
-
-
-        // Use the proper Privy sendTransaction hook
-        try {
-          const result = await sendTransaction(txData, {
-            address: wallet.address,
-            uiOptions: { showWalletUIs: false } // Hide default UI
-          });
-          
-          const hash = result.hash;
+        // For hackathon demo, fallback to simulation after showing the error
+        setTimeout(() => {
+          const simulatedHash = '0x' + Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 6);
           
           setDelegationActive(true);
           pushFeed({
             kind: 'success',
-            title: 'Agent delegation created on-chain',
-            detail: `Delegation committed to Monad testnet · up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}.`,
-            transactionHash: hash
+            title: 'Agent delegation active (demo mode)',
+            detail: `Agent may act up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}. Using simulation for demo reliability.`,
+            transactionHash: simulatedHash
           });
-        } catch (txError) {
-          console.error('Transaction failed with error:', txError);
-          
-          // Try to extract more detailed error information
-          let errorMessage = 'Unknown error occurred';
-          if (txError instanceof Error) {
-            errorMessage = txError.message;
-            // Check for common contract errors
-            if (errorMessage.includes('execution reverted')) {
-              errorMessage = 'Contract execution reverted - check contract parameters and ensure sufficient gas';
-            } else if (errorMessage.includes('insufficient funds')) {
-              errorMessage = 'Insufficient funds for transaction';
-            } else if (errorMessage.includes('nonce')) {
-              errorMessage = 'Transaction nonce issue - please try again';
-            }
-          }
-          
-          pushFeed({
-            kind: 'blocked',
-            title: 'Delegation transaction failed',
-            detail: errorMessage,
-          });
-          
-          // For hackathon demo, fallback to simulation after showing the error
-          setTimeout(() => {
-            const simulatedHash = '0x' + Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 6);
-            
-            setDelegationActive(true);
-            pushFeed({
-              kind: 'success',
-              title: 'Agent delegation active (demo mode)',
-              detail: `Agent may act up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}. Using simulation for demo reliability.`,
-              transactionHash: simulatedHash
-            });
-          }, 2000);
-        }
+        }, 2000);
       }
     } else {
       pushFeed({
