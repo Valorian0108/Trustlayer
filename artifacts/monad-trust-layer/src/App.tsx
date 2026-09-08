@@ -321,14 +321,22 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         // Get the first wallet
         const wallet = wallets[0];
         
-
+        console.log('Transaction parameters:', {
+          owner: wallet.address,
+          agent: agentAddress,
+          tier: tierValue,
+          expiresAt: expiresAt,
+          currentTimestamp: Math.floor(Date.now() / 1000),
+          contractAddress: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS
+        });
         
         // Build the transaction data
         const txData = {
           to: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS,
           data: `0x${createDelegationSignature(agentAddress, tierValue, expiresAt)}`,
           chainId: 10143,
-          value: '0x0' // Explicitly set value to 0
+          value: '0x0', // Explicitly set value to 0
+          gas: '0x186A0' // Add gas limit (100,000 in hex) to ensure sufficient gas for contract execution
         };
 
         // Validate parameters before sending
@@ -363,17 +371,38 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         } catch (txError) {
           console.error('Transaction failed with error:', txError);
           
-          // For hackathon demo, fallback to simulation if transaction fails
-          // This ensures the demo works even if there are contract interface issues
-          const simulatedHash = '0x' + Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 6);
+          // Try to extract more detailed error information
+          let errorMessage = 'Unknown error occurred';
+          if (txError instanceof Error) {
+            errorMessage = txError.message;
+            // Check for common contract errors
+            if (errorMessage.includes('execution reverted')) {
+              errorMessage = 'Contract execution reverted - check contract parameters and ensure sufficient gas';
+            } else if (errorMessage.includes('insufficient funds')) {
+              errorMessage = 'Insufficient funds for transaction';
+            } else if (errorMessage.includes('nonce')) {
+              errorMessage = 'Transaction nonce issue - please try again';
+            }
+          }
           
-          setDelegationActive(true);
           pushFeed({
-            kind: 'success',
-            title: 'Agent delegation active (demo mode)',
-            detail: `Agent may act up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}. Using simulation for demo reliability.`,
-            transactionHash: simulatedHash
+            kind: 'blocked',
+            title: 'Delegation transaction failed',
+            detail: errorMessage,
           });
+          
+          // For hackathon demo, fallback to simulation after showing the error
+          setTimeout(() => {
+            const simulatedHash = '0x' + Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 6);
+            
+            setDelegationActive(true);
+            pushFeed({
+              kind: 'success',
+              title: 'Agent delegation active (demo mode)',
+              detail: `Agent may act up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}. Using simulation for demo reliability.`,
+              transactionHash: simulatedHash
+            });
+          }, 2000);
         }
       } catch (error) {
         console.error('Real transaction failed:', error);
@@ -467,7 +496,8 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
           to: import.meta.env.VITE_AUTHORIZATION_VERIFIER_ADDRESS,
           data: `0x${verifyAuthorizationSignature(proofId, root, nullifierHash)}`,
           chainId: 10143,
-          value: '0x0' // Explicitly set value to 0
+          value: '0x0', // Explicitly set value to 0
+          gas: '0x186A0' // Add gas limit (100,000 in hex) to ensure sufficient gas for contract execution
         };
 
 
@@ -492,17 +522,39 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         } catch (txError) {
           console.error('Verification transaction failed:', txError);
           
-          // For hackathon demo, fallback to simulation if transaction fails
-          // This ensures the demo works even if there are contract interface issues
-          const simulatedHash = '0x' + Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 6);
+          // Try to extract more detailed error information
+          let errorMessage = 'Unknown error occurred';
+          if (txError instanceof Error) {
+            errorMessage = txError.message;
+            // Check for common contract errors
+            if (errorMessage.includes('execution reverted')) {
+              errorMessage = 'Contract execution reverted - check contract parameters and ensure sufficient gas';
+            } else if (errorMessage.includes('insufficient funds')) {
+              errorMessage = 'Insufficient funds for transaction';
+            } else if (errorMessage.includes('nonce')) {
+              errorMessage = 'Transaction nonce issue - please try again';
+            }
+          }
           
-          setVerificationPhase('approved');
           pushFeed({
-            kind: 'success',
-            title: 'Large purchase approved (demo mode)',
-            detail: '$500 action · Using simulation for demo reliability.',
-            transactionHash: simulatedHash
+            kind: 'blocked',
+            title: 'Verification transaction failed',
+            detail: errorMessage,
           });
+          
+          // For hackathon demo, fallback to simulation after showing the error
+          setTimeout(() => {
+            const simulatedHash = '0x' + Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 6);
+            
+            setVerificationPhase('approved');
+            pushFeed({
+              kind: 'success',
+              title: 'Large purchase approved (demo mode)',
+              detail: '$500 action · Using simulation for demo reliability.',
+              transactionHash: simulatedHash
+            });
+          }, 2000);
+        }
           
           setTimeout(() => setVerificationPhase('idle'), 2400);
         }

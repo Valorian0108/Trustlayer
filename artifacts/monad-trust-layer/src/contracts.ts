@@ -27,13 +27,22 @@ export enum Tier {
 }
 
 export function getContractAddresses() {
+  const contractsReady = Boolean(DELEGATION_REGISTRY_ADDRESS && AUTHORIZATION_VERIFIER_ADDRESS);
+  
+  console.log('Contract configuration:', {
+    delegationRegistry: DELEGATION_REGISTRY_ADDRESS,
+    authorizationVerifier: AUTHORIZATION_VERIFIER_ADDRESS,
+    chainId: MONAD_TESTNET_CHAIN_ID,
+    contractsReady
+  });
+  
   return {
     delegationRegistry: DELEGATION_REGISTRY_ADDRESS,
     authorizationVerifier: AUTHORIZATION_VERIFIER_ADDRESS,
     chainId: MONAD_TESTNET_CHAIN_ID,
     rpc: MONAD_TESTNET_RPC,
     explorer: MONAD_TESTNET_EXPLORER,
-    contractsReady: Boolean(DELEGATION_REGISTRY_ADDRESS && AUTHORIZATION_VERIFIER_ADDRESS)
+    contractsReady
   };
 }
 
@@ -87,6 +96,15 @@ export function createDelegationSignature(agentAddress: string, tier: Tier, expi
       tier, // Tier enum value (0, 1, or 2)
       expiresAt
     ]);
+    
+    console.log('Encoded delegation call:', {
+      function: 'createDelegation(address,uint8,uint256)',
+      agent: agentAddress,
+      tier: tier,
+      expiresAt: expiresAt,
+      encodedData: encodedData,
+      methodSelector: encodedData.slice(0, 10)
+    });
     
     return encodedData.slice(2); // Remove '0x' prefix for consistency
   } catch (error) {
