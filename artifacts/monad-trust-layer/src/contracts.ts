@@ -103,8 +103,17 @@ export function createDelegationSignature(agentAddress: string, tier: Tier, expi
       tier: tier,
       expiresAt: expiresAt,
       encodedData: encodedData,
-      methodSelector: encodedData.slice(0, 10)
+      methodSelector: encodedData.slice(0, 10),
+      expectedSelector: '0x612f9ca3' // This is the selector from your failed transaction
     });
+    
+    // Check if the method selector matches what we expect
+    const actualSelector = encodedData.slice(0, 10);
+    if (actualSelector !== '0x612f9ca3') {
+      console.warn('Method selector mismatch!');
+      console.warn('Expected: 0x612f9ca3, Got:', actualSelector);
+      console.warn('This suggests the deployed contract function signature is different');
+    }
     
     return encodedData.slice(2); // Remove '0x' prefix for consistency
   } catch (error) {

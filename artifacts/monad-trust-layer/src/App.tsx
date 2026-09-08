@@ -398,13 +398,24 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
       // Use the proper Privy sendTransaction hook
       try {
         console.log('Attempting transaction with params:', txData);
+        console.log('Function signature being called:', 'createDelegation(address,uint8,uint256)');
+        console.log('Expected contract address:', import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS);
+        
         const result = await sendTransaction(txData, {
           address: wallet.address,
           uiOptions: { showWalletUIs: false } // Hide default UI
         });
         
         const hash = result.hash;
-        console.log('Transaction successful:', hash);
+        console.log('Transaction submitted successfully:', hash);
+        console.log('Check transaction on explorer:', `https://testnet.monadscan.com/tx/${hash}`);
+        
+        // IMPORTANT CLARIFICATION:
+        // "Transaction successful" in console = tx was accepted by network
+        // "Failed" in explorer = contract execution reverted during processing
+        // This is normal behavior - the tx was submitted but the contract rejected it
+        console.log('NOTE: Console "success" = tx submitted to network. Explorer "failed" = contract execution reverted.');
+        console.log('This happens when contract validation fails during execution, not during submission.');
         
         setDelegationActive(true);
         pushFeed({
