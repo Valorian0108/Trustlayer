@@ -285,14 +285,6 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
   const registerOwner = (user: User) => {
     if (ownerVerified) return;
     setOwnerIdentity({ privyId: user.id });
-    
-    // Check if Privy wallet address is different from potential agent wallet
-    if (wallets && wallets.length > 0) {
-      const privyAddress = wallets[0].address;
-      console.log('Privy wallet address:', privyAddress);
-      console.log('This should be different from your MetaMask agent wallet address');
-    }
-    
     pushFeed({
       kind: 'success',
       title: 'Owner identity verified',
@@ -1125,9 +1117,6 @@ function App() {
                   ethereum: {
                     createOnLogin: 'all-users',
                   },
-                },
-                appearance: {
-                  walletList: 'none', // Don't show external wallet list
                 },
               }}
             >
