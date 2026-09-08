@@ -356,6 +356,15 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         contractAddress: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS
       });
       
+      console.log('Transaction parameters (JSON):', JSON.stringify({
+        owner: wallet.address,
+        agent: agentAddress,
+        tier: tierValue,
+        expiresAt: expiresAt,
+        currentTimestamp: Math.floor(Date.now() / 1000),
+        contractAddress: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS
+      }, null, 2));
+      
       // Build the transaction data
       const txData = {
         to: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS,
@@ -373,6 +382,14 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         expiresAt,
         currentTime: Math.floor(Date.now() / 1000)
       });
+      
+      console.log('Validating transaction parameters (JSON):', JSON.stringify({
+        agentAddress,
+        ownerAddress: wallet.address,
+        tierValue,
+        expiresAt,
+        currentTime: Math.floor(Date.now() / 1000)
+      }, null, 2));
       
       if (!agentAddress || agentAddress === '0x0000000000000000000000000000000000000000') {
         throw new Error('Invalid agent address - cannot be zero address');
