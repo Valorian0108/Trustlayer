@@ -364,12 +364,6 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         value: '0x0', // Explicitly set value to 0
         gas: '0x186A0' // Add gas limit (100,000 in hex) to ensure sufficient gas for contract execution
       };
-      
-      console.log('Transaction data being sent:', {
-        to: txData.to,
-        chainId: txData.chainId,
-        expectedChainId: 10143
-      });
 
       // Validate parameters before sending
       console.log('Validating transaction parameters:', {
@@ -406,8 +400,6 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         console.log('Attempting transaction with params:', txData);
         console.log('Function signature being called:', 'createDelegation(address,uint8,uint256)');
         console.log('Expected contract address:', import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS);
-        console.log('Expected chain ID:', 10143, '(Monad testnet)');
-        console.log('Current wallet network:', wallets[0]?.chainId || 'unknown');
         
         const result = await sendTransaction(txData, {
           address: wallet.address,
@@ -416,26 +408,6 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         
         const hash = result.hash;
         console.log('Transaction submitted successfully:', hash);
-        console.log('Transaction chain ID:', result.chainId || 'unknown');
-        
-        // CRITICAL: Check if transaction was sent to correct network
-        if (result.chainId && result.chainId !== 10143) {
-          console.error('CRITICAL ERROR: Transaction sent to wrong network!');
-          console.error('Expected chain ID: 10143 (Monad testnet)');
-          console.error('Actual chain ID:', result.chainId);
-          console.error('This explains why the contract execution is failing - wrong network!');
-          console.error('The contract address exists on Monad, but tx was sent to:', result.chainId);
-          
-          pushFeed({
-            kind: 'blocked',
-            title: 'Wrong network - Transaction failed',
-            detail: `Transaction sent to chain ${result.chainId} instead of Monad testnet (10143). Please check wallet network.`,
-          });
-          
-          // Don't proceed with success state since transaction was sent to wrong network
-          return;
-        }
-        
         console.log('Check transaction on explorer:', `https://testnet.monadscan.com/tx/${hash}`);
         
         // IMPORTANT CLARIFICATION:
