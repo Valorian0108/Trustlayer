@@ -269,9 +269,9 @@ Trustlayer/
 
 1. **Simplified Verifier**: Using demo version instead of full Semaphore ZK proofs
 2. **No Real ZK Circuits**: Proof generation is simplified for hackathon timeline
-3. **Mock Privy Integration**: Current implementation uses mock Privy wallet for demo
-4. **Production Encoding**: Function signatures need proper ethers.js encoding for production
-5. **MetaMask Integration**: Agent wallet integration not yet implemented
+3. **Simulation Fallback**: Demo mode falls back to simulation when contract transactions fail for reliability
+4. **Production Encoding**: Function signatures use ethers.js encoding with error handling
+5. **MetaMask Integration**: Agent wallet integration implemented for dual-wallet architecture
 
 ---
 

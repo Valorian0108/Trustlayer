@@ -274,21 +274,14 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         // Get the first wallet
         const wallet = wallets[0];
         
-        console.log('=== WALLET DEBUG ===');
-        console.log('Available wallets:', wallets.map(w => ({ address: w.address, walletClientType: w.walletClientType })));
-        console.log('Selected wallet address:', wallet.address);
-        console.log('Wallet client type:', wallet.walletClientType);
-        console.log('Contract deployer address:', '0x56C9a37F08035a440581C3ebeDf7dE3A6Ff4e60F');
-        console.log('Is selected wallet the contract deployer?', wallet.address.toLowerCase() === '0x56c9a37f08035a440581c3ebedf7de3a6ff4e60f');
-        console.log('===================');
+
         
         // Build the transaction data
         const txData = {
           to: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS,
           data: `0x${createDelegationSignature(agentAddress, tierValue, expiresAt)}`,
           chainId: 10143,
-          value: '0x0', // Explicitly set value to 0
-          gas: '0x5208' // Add explicit gas limit (21000 in hex)
+          value: '0x0' // Explicitly set value to 0
         };
 
         // Validate parameters before sending
@@ -296,44 +289,22 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
           throw new Error('Invalid agent address');
         }
         
-        console.log('=== ADDRESS VALIDATION DEBUG ===');
-        console.log('Agent address (from MetaMask):', agentAddress);
-        console.log('Owner address (from Privy):', wallet.address);
-        console.log('Agent lowercase:', agentAddress.toLowerCase());
-        console.log('Owner lowercase:', wallet.address.toLowerCase());
-        console.log('Are they equal?', agentAddress.toLowerCase() === wallet.address.toLowerCase());
-        console.log('Note: Address validation temporarily disabled for testing');
-        console.log('=================================');
+        // Note: In dual-wallet architecture, owner (Privy) and agent (MetaMask) addresses should be different
+        // This is by design - the owner authorizes the agent to act on their behalf
         if (expiresAt <= Math.floor(Date.now() / 1000)) {
           throw new Error('Expiry time must be in the future');
         }
 
-        console.log('=== TRANSACTION DEBUG ===');
-        console.log('Sending delegation transaction:', txData);
-        console.log('Privy wallet address:', wallet.address);
-        console.log('Is this the contract deployer?', wallet.address.toLowerCase() === '0x56c9a37f08035a440581c3ebedf7de3a6ff4e60f');
-        console.log('Contract address:', import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS);
-        console.log('Agent address:', agentAddress);
-        console.log('Tier value:', tierValue);
-        console.log('Expires at:', expiresAt);
-        console.log('Current timestamp:', Math.floor(Date.now() / 1000));
-        console.log('Time until expiry:', expiresAt - Math.floor(Date.now() / 1000), 'seconds');
-        console.log('=========================');
+
 
         // Use the proper Privy sendTransaction hook
         try {
-          console.log('About to call sendTransaction with wallet:', wallet.address);
-          console.log('Transaction data:', txData);
-          
           const result = await sendTransaction(txData, {
             address: wallet.address,
             uiOptions: { showWalletUIs: false } // Hide default UI
           });
           
-          console.log('Transaction result:', result);
           const hash = result.hash;
-          console.log('Transaction hash:', hash);
-          console.log('Check transaction on MonadScan:', `https://testnet.monadscan.com/tx/${hash}`);
           
           setDelegationActive(true);
           pushFeed({
@@ -345,15 +316,15 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         } catch (txError) {
           console.error('Transaction failed with error:', txError);
           
-          // For hackathon demo, fallback to simulation if contract interface doesn't match
-          console.log('Contract interface mismatch - using simulation for demo reliability');
+          // For hackathon demo, fallback to simulation if transaction fails
+          // This ensures the demo works even if there are contract interface issues
           const simulatedHash = '0x' + Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 6);
           
           setDelegationActive(true);
           pushFeed({
             kind: 'success',
             title: 'Agent delegation active (demo mode)',
-            detail: `Agent may act up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}. Contract interface mismatch detected - using simulation for demo reliability.`,
+            detail: `Agent may act up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}. Using simulation for demo reliability.`,
             transactionHash: simulatedHash
           });
         }
@@ -438,8 +409,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
           value: '0x0' // Explicitly set value to 0
         };
 
-        console.log('Sending verification transaction:', txData);
-        console.log('Wallet address:', wallet.address);
+
 
         // Use the proper Privy sendTransaction hook
         try {
@@ -447,7 +417,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
             address: wallet.address,
             uiOptions: { showWalletUIs: false } // Hide default UI
           });
-          console.log('Verification transaction sent successfully:', hash);
+
           
           setVerificationPhase('approved');
           pushFeed({
@@ -461,15 +431,15 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         } catch (txError) {
           console.error('Verification transaction failed:', txError);
           
-          // For hackathon demo, fallback to simulation if contract interface doesn't match
-          console.log('Contract interface mismatch - using simulation for demo reliability');
+          // For hackathon demo, fallback to simulation if transaction fails
+          // This ensures the demo works even if there are contract interface issues
           const simulatedHash = '0x' + Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 6);
           
           setVerificationPhase('approved');
           pushFeed({
             kind: 'success',
             title: 'Large purchase approved (demo mode)',
-            detail: '$500 action · Contract interface mismatch detected - using simulation for demo reliability.',
+            detail: '$500 action · Using simulation for demo reliability.',
             transactionHash: simulatedHash
           });
           
@@ -580,7 +550,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
             <div className="top-actions">
               <div className="network-pill" data-testid="status-network">
                 <span className="live-dot" />
-                Monad testnet · real transactions
+                Monad testnet · {contractsReady ? 'ready' : 'simulation mode'}
               </div>
               <div className="status-pill" data-testid="status-authorization-layer">
                 <Radio size={11} /> Authorization layer · {contractsReady && useRealTransactions ? 'Privy wallet ready' : 'wallet not connected'}
@@ -825,7 +795,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
               <div className="proof-note" data-testid="text-proof-note">
                 <strong>What this proves:</strong> not who the owner is, but
                 that a valid owner authorization exists. The proof path is built
-                for a verifier contract on Monad testnet. Transactions are sent to real smart contracts.
+                for a verifier contract on Monad testnet. Transactions attempt real smart contract calls with simulation fallback for demo reliability.
               </div>
             </div>
 

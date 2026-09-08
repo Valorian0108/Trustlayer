@@ -74,46 +74,46 @@ interface ActualPrivyInstance {
 
 // Helper function to encode the createDelegation function call using ethers.js
 export function createDelegationSignature(agentAddress: string, tier: Tier, expiresAt: number): string {
-  // Use ethers.js to properly encode the function call
-  // The contract signature is: createDelegation(address,uint8,uint256)
-  // where uint8 represents the Tier enum
-  const iface = new ethers.Interface([
-    'function createDelegation(address agent, uint8 tier, uint256 expiresAt) returns (uint256)'
-  ]);
-  
-  const encodedData = iface.encodeFunctionData('createDelegation', [
-    agentAddress,
-    tier, // Tier enum value (0, 1, or 2)
-    expiresAt
-  ]);
-  
-  console.log('=== DELEGATION ENCODING DEBUG ===');
-  console.log('Function signature: createDelegation(address,uint8,uint256)');
-  console.log('Agent address:', agentAddress);
-  console.log('Tier:', tier, '(0=Basic, 1=Routine, 2=Elevated)');
-  console.log('Expires at:', expiresAt);
-  console.log('Encoded data:', encodedData);
-  console.log('Method selector:', encodedData.slice(0, 10));
-  console.log('Expected selector (from contract): 0x????????');
-  console.log('================================');
-  
-  return encodedData.slice(2); // Remove '0x' prefix for consistency
+  try {
+    // Use ethers.js to properly encode the function call
+    // The contract signature is: createDelegation(address,uint8,uint256)
+    // where uint8 represents the Tier enum
+    const iface = new ethers.Interface([
+      'function createDelegation(address agent, uint8 tier, uint256 expiresAt) returns (uint256)'
+    ]);
+    
+    const encodedData = iface.encodeFunctionData('createDelegation', [
+      agentAddress,
+      tier, // Tier enum value (0, 1, or 2)
+      expiresAt
+    ]);
+    
+    return encodedData.slice(2); // Remove '0x' prefix for consistency
+  } catch (error) {
+    console.error('Failed to encode delegation signature:', error);
+    throw new Error('Contract encoding failed');
+  }
 }
 
 // Helper function to encode the verifyAuthorization function call using ethers.js
 export function verifyAuthorizationSignature(proofId: bigint, root: bigint, nullifierHash: bigint): string {
-  // Use ethers.js to properly encode the function call
-  const iface = new ethers.Interface([
-    'function verifyAuthorization(uint256 proofId, uint256 root, uint256 nullifierHash) returns (bool)'
-  ]);
-  
-  const encodedData = iface.encodeFunctionData('verifyAuthorization', [
-    proofId,
-    root,
-    nullifierHash
-  ]);
-  
-  return encodedData.slice(2); // Remove '0x' prefix for consistency
+  try {
+    // Use ethers.js to properly encode the function call
+    const iface = new ethers.Interface([
+      'function verifyAuthorization(uint256 proofId, uint256 root, uint256 nullifierHash) returns (bool)'
+    ]);
+    
+    const encodedData = iface.encodeFunctionData('verifyAuthorization', [
+      proofId,
+      root,
+      nullifierHash
+    ]);
+    
+    return encodedData.slice(2); // Remove '0x' prefix for consistency
+  } catch (error) {
+    console.error('Failed to encode verification signature:', error);
+    throw new Error('Contract encoding failed');
+  }
 }
 
 // Function to create delegation using Privy wallet (deprecated - now handled directly in App.tsx)
