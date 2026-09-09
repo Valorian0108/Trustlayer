@@ -1122,6 +1122,22 @@ function App() {
                 embeddedWallets: {
                   ethereum: {
                     createOnLogin: 'users-without-wallets',
+                    noPromptOnSignature: true,
+                  },
+                },
+                appearance: {
+                  theme: 'light',
+                  accentColor: '#6366f1',
+                },
+                loginMethods: ['email', 'google', 'github', 'twitter', 'discord', 'apple', 'farcaster'],
+                externalWallets: {
+                  walletConnect: {
+                    // Disable WalletConnect to prevent external wallet syncing
+                    createOnLogin: 'never',
+                  },
+                  injected: {
+                    // Disable injected wallet syncing
+                    createOnLogin: 'never',
                   },
                 },
               }}
