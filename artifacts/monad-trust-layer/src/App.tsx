@@ -964,7 +964,8 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
                         </div>
                       </div>
                     )}
-                    ) : privyConfigured ? (
+
+                    {privyConfigured && !ownerVerified ? (
                       <PrivyOwnerRegistration
                         onComplete={registerOwner}
                         onError={handleOwnerError}
