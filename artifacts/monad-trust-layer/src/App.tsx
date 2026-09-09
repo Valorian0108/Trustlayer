@@ -849,7 +849,15 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
                         </div>
                         <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
                           <button 
-                            onClick={() => logout()}
+                            onClick={async () => {
+                              try {
+                                await logout();
+                                console.log('User successfully logged out');
+                              } catch (error) {
+                                console.error('Logout failed:', error);
+                              }
+                            }}
+                            disabled={!ready || !authenticated}
                             style={{
                               background: 'transparent',
                               border: '1px solid #ef4444',
@@ -857,7 +865,8 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
                               padding: '4px 8px',
                               borderRadius: '4px',
                               fontSize: '11px',
-                              cursor: 'pointer'
+                              cursor: (!ready || !authenticated) ? 'not-allowed' : 'pointer',
+                              opacity: (!ready || !authenticated) ? 0.5 : 1
                             }}
                           >
                             Logout
