@@ -11,6 +11,7 @@ import {
   useWallets,
   useSendTransaction,
   useLogout,
+  useCreateWallet,
   type User,
 } from '@privy-io/react-auth';
 import {
@@ -119,6 +120,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
   const { ready, authenticated, user, logout } = usePrivy();
   const { wallets } = useWallets();
   const { sendTransaction } = useSendTransaction();
+  const { createWallet } = useCreateWallet();
   
   // Debug Privy wallet availability
   useEffect(() => {
@@ -870,6 +872,32 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
                             }}
                           >
                             Logout
+                          </button>
+                          <button 
+                            onClick={async () => {
+                              try {
+                                console.log('Creating new embedded wallet...');
+                                const newWallet = await createWallet({ createAdditional: true });
+                                console.log('New embedded wallet created:', newWallet);
+                                alert('New embedded wallet created! Please refresh the page to use it.');
+                              } catch (error) {
+                                console.error('Failed to create wallet:', error);
+                                alert('Failed to create new wallet: ' + (error as Error).message);
+                              }
+                            }}
+                            disabled={!ready || !authenticated}
+                            style={{
+                              background: 'transparent',
+                              border: '1px solid #6366f1',
+                              color: '#6366f1',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              cursor: (!ready || !authenticated) ? 'not-allowed' : 'pointer',
+                              opacity: (!ready || !authenticated) ? 0.5 : 1
+                            }}
+                          >
+                            New Wallet
                           </button>
                           <Check className="status-check" size={16} />
                         </div>
