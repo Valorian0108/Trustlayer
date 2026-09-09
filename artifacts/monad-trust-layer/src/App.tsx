@@ -39,7 +39,7 @@ import {
   useLocation,
   Router as WouterRouter,
 } from 'wouter';
-import { getContractAddresses, createDelegationSignature, verifyAuthorizationSignature } from './contracts';
+import { getContractAddresses, createDelegationSignature, verifyAuthorizationSignature, getEmbeddedWallet } from './contracts';
 import { getMetaMaskAgentManager, createDelegationTransaction, createVerificationTransaction } from './metamask-agent';
 
 const queryClient = new QueryClient();
@@ -126,7 +126,11 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
       authenticated,
       user: user?.id,
       wallets: wallets?.length,
-      walletAddresses: wallets?.map(w => w.address),
+      walletAddresses: wallets?.map(w => ({
+        address: w.address,
+        walletType: w.walletType,
+        connectorType: w.connectorType
+      })),
       userWallets: user?.linkedAccounts
     });
   }, [ready, authenticated, user, wallets]);
@@ -344,8 +348,11 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         throw new Error('No Privy wallet available');
       }
       
-      // Get the first wallet
-      const wallet = wallets[0];
+      // Get the embedded wallet (to avoid using external wallets like MetaMask)
+      const wallet = getEmbeddedWallet(wallets);
+      if (!wallet) {
+        throw new Error('No embedded wallet available');
+      }
       
       console.log('Transaction parameters:', {
         owner: wallet.address,
@@ -576,8 +583,11 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
           throw new Error('No Privy wallet available');
         }
         
-        // Get the first wallet
-        const wallet = wallets[0];
+        // Get the embedded wallet (to avoid using external wallets like MetaMask)
+        const wallet = getEmbeddedWallet(wallets);
+        if (!wallet) {
+          throw new Error('No embedded wallet available');
+        }
         
         // Generate realistic proof parameters for demo
         // Note: In production, these would come from actual ZK proof generation
