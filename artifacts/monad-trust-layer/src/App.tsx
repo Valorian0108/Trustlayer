@@ -126,11 +126,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
       authenticated,
       user: user?.id,
       wallets: wallets?.length,
-      walletAddresses: wallets?.map(w => ({
-        address: w.address,
-        walletType: w.walletType,
-        connectorType: w.connectorType
-      })),
+      walletAddresses: wallets?.map(w => w.address),
       userWallets: user?.linkedAccounts
     });
   }, [ready, authenticated, user, wallets]);

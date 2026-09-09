@@ -70,29 +70,30 @@ interface PrivyInstance {
 }
 
 // Type for actual Privy wallet from useWallets hook
+// Note: This matches the actual ConnectedWallet type from Privy
 interface ActualPrivyWallet {
   address: string;
-  walletClient: any; // The actual wallet client for transactions
-  walletType?: string; // 'embedded' or 'external'
-  connectorType?: string; // Additional wallet metadata
-}
-
-interface ActualPrivyInstance {
-  wallets: ActualPrivyWallet[];
+  [key: string]: any; // Allow other properties that Privy might include
 }
 
 // Helper function to find the embedded wallet from Privy wallets array
 // This ensures we use the Privy embedded wallet for owner transactions
 // rather than accidentally using an external wallet like MetaMask
-export function getEmbeddedWallet(wallets: ActualPrivyWallet[]): ActualPrivyWallet | null {
+export function getEmbeddedWallet(wallets: any[]): any | null {
   if (!wallets || wallets.length === 0) {
     return null;
   }
 
-  // First try to find a wallet with walletType === 'embedded'
-  const embeddedWallet = wallets.find(w => w.walletType === 'embedded');
+  // Try to identify embedded wallet by checking for typical properties
+  // Privy embedded wallets often have different metadata than external wallets
+  const embeddedWallet = wallets.find((w: any) => 
+    w.walletType === 'embedded' || 
+    w.connectorType === 'privy' ||
+    !w.connectorType // Embedded wallets often don't have a connectorType
+  );
+  
   if (embeddedWallet) {
-    console.log('Found embedded wallet by type:', embeddedWallet.address);
+    console.log('Found embedded wallet:', embeddedWallet.address);
     return embeddedWallet;
   }
 
