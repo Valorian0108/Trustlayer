@@ -377,7 +377,16 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         });
 
         if (balanceInEth < 0.001) {
-          throw new Error(`Privy wallet has insufficient funds on Monad testnet. Balance: ${balanceInEth} MON. Please get testnet MON from the faucet at https://faucet.monad.xyz and send it to your Privy wallet address: ${wallet.address}`);
+          throw new Error(`Privy wallet has insufficient funds on Monad testnet. Balance: ${balanceInEth} MON. 
+
+Your external wallet (MetaMask/Rabby) has funds, but the Privy embedded wallet being used for owner transactions has 0 balance.
+
+SOLUTION: Send testnet MON from your external wallet to your Privy wallet address: ${wallet.address}
+
+1. Copy this Privy wallet address: ${wallet.address}
+2. Use your external wallet (MetaMask/Rabby) to send testnet MON to this address
+3. Get testnet MON from faucet: https://faucet.monad.xyz
+4. Then try the transaction again`);
         }
       } catch (balanceError) {
         console.warn('Could not check wallet balance:', balanceError);
