@@ -402,12 +402,13 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
         contractAddress: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS
       }, null, 2));
       
-      // Build the transaction data without chainId (let Privy handle chain)
+      // Build the transaction data with chain specification
       const txData = {
         to: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS,
         data: `0x${createDelegationSignature(agentAddress, tierValue, expiresAt)}`,
         value: '0x0', // Explicitly set value to 0
-        gas: '0x186A0' // Add gas limit (100,000 in hex) to ensure sufficient gas for contract execution
+        gas: '0x186A0', // Add gas limit (100,000 in hex) to ensure sufficient gas for contract execution
+        chainId: '0x2797', // Explicitly set to Monad testnet (10143 in hex)
       };
 
       // Validate parameters before sending
@@ -624,12 +625,13 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
         const root = BigInt(Math.floor(Math.random() * 1000000));
         const nullifierHash = BigInt(Math.floor(Math.random() * 1000000));
         
-        // Build the transaction data without chainId (let Privy handle chain)
+        // Build the transaction data with chain specification
         const txData = {
           to: import.meta.env.VITE_AUTHORIZATION_VERIFIER_ADDRESS,
           data: `0x${verifyAuthorizationSignature(proofId, root, nullifierHash)}`,
           value: '0x0', // Explicitly set value to 0
-          gas: '0x186A0' // Add gas limit (100,000 in hex) to ensure sufficient gas for contract execution
+          gas: '0x186A0', // Add gas limit (100,000 in hex) to ensure sufficient gas for contract execution
+          chainId: '0x2797', // Explicitly set to Monad testnet (10143 in hex)
         };
 
 
