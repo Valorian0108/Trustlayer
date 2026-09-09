@@ -42,6 +42,7 @@ import {
   Router as WouterRouter,
 } from 'wouter';
 import { getContractAddresses, createDelegationSignature, verifyAuthorizationSignature, getEmbeddedWallet } from './contracts';
+import { ethers } from 'ethers';
 import { getMetaMaskAgentManager, createDelegationTransaction, createVerificationTransaction } from './metamask-agent';
 
 const queryClient = new QueryClient();
@@ -361,6 +362,27 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         currentTimestamp: Math.floor(Date.now() / 1000),
         contractAddress: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS
       });
+
+      // Check Privy wallet balance on Monad testnet
+      try {
+        const provider = new ethers.JsonRpcProvider('https://testnet-rpc.monad.xyz');
+        const balance = await provider.getBalance(wallet.address);
+        const balanceInEth = parseFloat(ethers.formatEther(balance));
+        
+        console.log('Privy wallet balance on Monad testnet:', {
+          address: wallet.address,
+          balance: balance.toString(),
+          balanceInEth: balanceInEth,
+          hasFunds: balanceInEth > 0.001 // Need at least 0.001 MON for gas
+        });
+
+        if (balanceInEth < 0.001) {
+          throw new Error(`Privy wallet has insufficient funds on Monad testnet. Balance: ${balanceInEth} MON. Please get testnet MON from the faucet at https://faucet.monad.xyz and send it to your Privy wallet address: ${wallet.address}`);
+        }
+      } catch (balanceError) {
+        console.warn('Could not check wallet balance:', balanceError);
+        // Continue anyway, let the transaction fail with proper error
+      }
       
       console.log('Transaction parameters (JSON):', JSON.stringify({
         owner: wallet.address,
