@@ -465,8 +465,7 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
         
         const result = await sendTransaction(txData, {
           address: wallet.address,
-          uiOptions: { showWalletUIs: false }, // Hide default UI
-          chainId: 10143, // Force Monad testnet
+          uiOptions: { showWalletUIs: false } // Hide default UI
         });
         
         const hash = result.hash;
@@ -639,8 +638,7 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
         try {
           const { hash } = await sendTransaction(txData, {
             address: wallet.address,
-            uiOptions: { showWalletUIs: false }, // Hide default UI
-            chainId: 10143, // Force Monad testnet
+            uiOptions: { showWalletUIs: false } // Hide default UI
           });
 
           
