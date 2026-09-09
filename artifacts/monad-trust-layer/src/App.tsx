@@ -43,6 +43,31 @@ import {
 } from 'wouter';
 import { getContractAddresses, createDelegationSignature, verifyAuthorizationSignature, getEmbeddedWallet } from './contracts';
 import { ethers } from 'ethers';
+import { defineChain } from 'viem';
+
+// Define Monad testnet as a custom chain for Privy
+const monadTestnet = defineChain({
+  id: 10143,
+  name: 'Monad Testnet',
+  network: 'monad-testnet',
+  nativeCurrency: {
+    decimals: 18,
+    name: 'MON',
+    symbol: 'MON',
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://testnet-rpc.monad.xyz'],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'MonadScan',
+      url: 'https://testnet.monadscan.com',
+    },
+  },
+  testnet: true,
+});
 import { getMetaMaskAgentManager, createDelegationTransaction, createVerificationTransaction } from './metamask-agent';
 
 const queryClient = new QueryClient();
@@ -1212,6 +1237,8 @@ function App() {
                   accentColor: '#6366f1',
                 },
                 loginMethods: ['email', 'google', 'github', 'twitter', 'discord', 'apple', 'farcaster'],
+                defaultChain: monadTestnet,
+                supportedChains: [monadTestnet],
               }}
             >
               {routedApp}
