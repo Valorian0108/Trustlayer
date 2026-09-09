@@ -1183,12 +1183,6 @@ function App() {
                   accentColor: '#6366f1',
                 },
                 loginMethods: ['email', 'google', 'github', 'twitter', 'discord', 'apple', 'farcaster'],
-                supportedChains: [
-                  {
-                    chainId: '0x2797', // 10143 in hex (Monad testnet)
-                    chainType: 'ethereum',
-                  },
-                ],
               }}
             >
               {routedApp}
