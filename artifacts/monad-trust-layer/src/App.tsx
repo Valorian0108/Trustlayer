@@ -10,6 +10,7 @@ import {
   useSignupWithPasskey,
   useWallets,
   useSendTransaction,
+  useLogout,
   type User,
 } from '@privy-io/react-auth';
 import {
@@ -115,9 +116,10 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
   };
   type VerificationPhase = 'idle' | 'proof' | 'verify' | 'approved' | 'blocked';
 
-  const { ready, authenticated, user, logout } = usePrivy();
+  const { ready, authenticated, user } = usePrivy();
   const { wallets } = useWallets();
   const { sendTransaction } = useSendTransaction();
+  const { logout: privyLogout } = useLogout();
   
   // Debug Privy wallet availability
   useEffect(() => {
@@ -848,7 +850,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
                         </div>
                         <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
                           <button 
-                            onClick={() => logout()}
+                            onClick={() => privyLogout()}
                             style={{
                               background: 'transparent',
                               border: '1px solid #ef4444',
