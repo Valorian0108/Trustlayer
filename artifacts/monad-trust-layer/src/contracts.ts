@@ -84,22 +84,37 @@ export function getEmbeddedWallet(wallets: any[]): any | null {
     return null;
   }
 
-  // Try to identify embedded wallet by checking for typical properties
-  // Privy embedded wallets often have different metadata than external wallets
-  const embeddedWallet = wallets.find((w: any) => 
+  console.log('Available wallets:', wallets.map((w: any) => ({
+    address: w.address,
+    walletClientType: w.walletClientType,
+    connectorType: w.connectorType,
+    walletType: w.walletType
+  })));
+
+  // Try to identify embedded wallet by checking for walletClientType: 'privy'
+  // This is the definitive way to identify embedded wallets according to Privy docs
+  const embeddedWallet = wallets.find((w: any) => w.walletClientType === 'privy');
+  
+  if (embeddedWallet) {
+    console.log('Found embedded wallet (walletClientType: privy):', embeddedWallet.address);
+    return embeddedWallet;
+  }
+
+  // Fallback: try other methods to identify embedded wallet
+  const fallbackWallet = wallets.find((w: any) => 
     w.walletType === 'embedded' || 
     w.connectorType === 'privy' ||
     !w.connectorType // Embedded wallets often don't have a connectorType
   );
   
-  if (embeddedWallet) {
-    console.log('Found embedded wallet:', embeddedWallet.address);
-    return embeddedWallet;
+  if (fallbackWallet) {
+    console.log('Found embedded wallet (fallback method):', fallbackWallet.address);
+    return fallbackWallet;
   }
 
-  // Fallback: use the first wallet (this is the original behavior)
-  // but log a warning that we couldn't definitively identify an embedded wallet
+  // Last resort: use the first wallet but log a warning
   console.warn('Could not definitively identify embedded wallet, using first wallet:', wallets[0].address);
+  console.warn('This may cause address collision if the first wallet is external');
   return wallets[0];
 }
 
