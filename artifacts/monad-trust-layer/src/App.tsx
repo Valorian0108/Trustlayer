@@ -371,11 +371,10 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         contractAddress: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS
       }, null, 2));
       
-      // Build the transaction data
+      // Build the transaction data without chainId (let Privy handle chain)
       const txData = {
         to: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS,
         data: `0x${createDelegationSignature(agentAddress, tierValue, expiresAt)}`,
-        chainId: 10143, // Explicitly set to Monad testnet
         value: '0x0', // Explicitly set value to 0
         gas: '0x186A0' // Add gas limit (100,000 in hex) to ensure sufficient gas for contract execution
       };
@@ -594,11 +593,10 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
         const root = BigInt(Math.floor(Math.random() * 1000000));
         const nullifierHash = BigInt(Math.floor(Math.random() * 1000000));
         
-        // Build the transaction data
+        // Build the transaction data without chainId (let Privy handle chain)
         const txData = {
           to: import.meta.env.VITE_AUTHORIZATION_VERIFIER_ADDRESS,
           data: `0x${verifyAuthorizationSignature(proofId, root, nullifierHash)}`,
-          chainId: 10143,
           value: '0x0', // Explicitly set value to 0
           gas: '0x186A0' // Add gas limit (100,000 in hex) to ensure sufficient gas for contract execution
         };
