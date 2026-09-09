@@ -432,7 +432,7 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
         to: import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS,
         data: `0x${createDelegationSignature(agentAddress, tierValue, expiresAt)}`,
         value: '0x0', // Explicitly set value to 0
-        gas: '0x186A0', // Add gas limit (100,000 in hex) to ensure sufficient gas for contract execution
+        gas: '0x4C4B40', // Increased gas limit (5,000,000 in hex) to handle contract execution
       };
 
       // Validate parameters before sending
@@ -654,7 +654,7 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
           to: import.meta.env.VITE_AUTHORIZATION_VERIFIER_ADDRESS,
           data: `0x${verifyAuthorizationSignature(proofId, root, nullifierHash)}`,
           value: '0x0', // Explicitly set value to 0
-          gas: '0x186A0', // Add gas limit (100,000 in hex) to ensure sufficient gas for contract execution
+          gas: '0x4C4B40', // Increased gas limit (5,000,000 in hex) to handle contract execution
         };
 
 
