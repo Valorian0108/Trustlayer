@@ -35,7 +35,6 @@ import {
   Wallet,
   AlertCircle,
   Wallet as WalletIcon,
-  Wallet as WalletIcon,
 } from 'lucide-react';
 import {
   Route,
