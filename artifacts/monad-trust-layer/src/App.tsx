@@ -1247,6 +1247,11 @@ function App() {
                 loginMethods: ['email', 'google', 'github', 'twitter', 'discord', 'apple', 'farcaster'],
                 defaultChain: monadTestnet,
                 supportedChains: [monadTestnet],
+                externalWallets: {
+                  ethereum: {
+                    createOnLogin: 'never',
+                  },
+                },
               }}
             >
               {routedApp}
