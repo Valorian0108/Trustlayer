@@ -115,7 +115,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
   };
   type VerificationPhase = 'idle' | 'proof' | 'verify' | 'approved' | 'blocked';
 
-  const { ready, authenticated, user } = usePrivy();
+  const { ready, authenticated, user, logout } = usePrivy();
   const { wallets } = useWallets();
   const { sendTransaction } = useSendTransaction();
   
@@ -846,7 +846,23 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
                             <span style={{color: '#f59e0b', fontSize: '11px'}}>· Privy wallet not detected</span>
                           )}
                         </div>
-                        <Check className="status-check" size={16} />
+                        <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                          <button 
+                            onClick={() => logout()}
+                            style={{
+                              background: 'transparent',
+                              border: '1px solid #ef4444',
+                              color: '#ef4444',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Logout
+                          </button>
+                          <Check className="status-check" size={16} />
+                        </div>
                       </div>
                     ) : privyConfigured ? (
                       <PrivyOwnerRegistration
