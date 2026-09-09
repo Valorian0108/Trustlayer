@@ -34,6 +34,7 @@ import {
   Zap,
   Wallet,
   AlertCircle,
+  Wallet as WalletIcon,
 } from 'lucide-react';
 import {
   Route,
@@ -898,12 +899,12 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
                           Verified owner
                           <span>passkey identity</span>
                           {wallets && wallets.length > 0 ? (
-                            <span style={{color: '#22c55e', fontSize: '11px'}}>· Privy wallet ready</span>
+                            <span className="wallet-status ready">· Privy wallet ready</span>
                           ) : (
-                            <span style={{color: '#f59e0b', fontSize: '11px'}}>· Privy wallet not detected</span>
+                            <span className="wallet-status missing">· Privy wallet not detected</span>
                           )}
                         </div>
-                        <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                        <div className="identity-actions">
                           <button 
                             onClick={async () => {
                               try {
@@ -914,16 +915,7 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
                               }
                             }}
                             disabled={!ready || !authenticated}
-                            style={{
-                              background: 'transparent',
-                              border: '1px solid #ef4444',
-                              color: '#ef4444',
-                              padding: '4px 8px',
-                              borderRadius: '4px',
-                              fontSize: '11px',
-                              cursor: (!ready || !authenticated) ? 'not-allowed' : 'pointer',
-                              opacity: (!ready || !authenticated) ? 0.5 : 1
-                            }}
+                            className="action-button logout-button"
                           >
                             Logout
                           </button>
@@ -940,22 +932,37 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
                               }
                             }}
                             disabled={!ready || !authenticated}
-                            style={{
-                              background: 'transparent',
-                              border: '1px solid #6366f1',
-                              color: '#6366f1',
-                              padding: '4px 8px',
-                              borderRadius: '4px',
-                              fontSize: '11px',
-                              cursor: (!ready || !authenticated) ? 'not-allowed' : 'pointer',
-                              opacity: (!ready || !authenticated) ? 0.5 : 1
-                            }}
+                            className="action-button new-wallet-button"
                           >
                             New Wallet
                           </button>
                           <Check className="status-check" size={16} />
                         </div>
                       </div>
+                    ) : null}
+
+                    {ownerVerified && wallets && wallets.length > 0 && (
+                      <div className="wallet-info">
+                        <div className="wallet-info-header">
+                          <WalletIcon size={14} />
+                          <span>Your Privy Wallet</span>
+                        </div>
+                        <div className="wallet-address">
+                          {wallets[0]?.address}
+                        </div>
+                        <div className="wallet-info-body">
+                          <p>Fund this wallet with Monad testnet tokens from the faucet:</p>
+                          <a 
+                            href="https://faucet.monad.xyz" 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="faucet-link"
+                          >
+                            Get MON from faucet →
+                          </a>
+                        </div>
+                      </div>
+                    )}
                     ) : privyConfigured ? (
                       <PrivyOwnerRegistration
                         onComplete={registerOwner}
