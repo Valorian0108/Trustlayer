@@ -116,10 +116,9 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
   };
   type VerificationPhase = 'idle' | 'proof' | 'verify' | 'approved' | 'blocked';
 
-  const { ready, authenticated, user } = usePrivy();
+  const { ready, authenticated, user, logout } = usePrivy();
   const { wallets } = useWallets();
   const { sendTransaction } = useSendTransaction();
-  const { logout: privyLogout } = useLogout();
   
   // Debug Privy wallet availability
   useEffect(() => {
@@ -850,7 +849,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
                         </div>
                         <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
                           <button 
-                            onClick={() => privyLogout()}
+                            onClick={() => logout()}
                             style={{
                               background: 'transparent',
                               border: '1px solid #ef4444',
