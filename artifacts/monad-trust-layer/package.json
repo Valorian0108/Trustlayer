@@ -77,6 +77,7 @@
   "dependencies": {
     "@privy-io/react-auth": "^3.39.0",
     "@stripe/stripe-js": "^9.15.0",
-    "ethers": "^6.13.0"
+    "ethers": "^6.13.0",
+    "viem": "^2.56.3"
   }
 }
