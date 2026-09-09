@@ -1214,6 +1214,12 @@ function App() {
                   accentColor: '#6366f1',
                 },
                 loginMethods: ['email', 'google', 'github', 'twitter', 'discord', 'apple', 'farcaster'],
+                rpcConfig: {
+                  ethereum: {
+                    rpcUrl: 'https://testnet-rpc.monad.xyz',
+                    chainId: 10143,
+                  },
+                },
               }}
             >
               {routedApp}
