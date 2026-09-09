@@ -1139,7 +1139,7 @@ function App() {
               config={{
                 embeddedWallets: {
                   ethereum: {
-                    createOnLogin: 'users-without-wallets',
+                    createOnLogin: 'all-users',
                   },
                 },
                 appearance: {
@@ -1147,6 +1147,7 @@ function App() {
                   accentColor: '#6366f1',
                 },
                 loginMethods: ['email', 'google', 'github', 'twitter', 'discord', 'apple', 'farcaster'],
+
               }}
             >
               {routedApp}
