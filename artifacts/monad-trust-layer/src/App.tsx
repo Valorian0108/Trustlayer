@@ -1115,7 +1115,7 @@ function App() {
               config={{
                 embeddedWallets: {
                   ethereum: {
-                    createOnLogin: 'all-users',
+                    createOnLogin: 'users-without-wallets',
                   },
                 },
               }}
