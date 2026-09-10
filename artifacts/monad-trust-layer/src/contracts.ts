@@ -161,6 +161,78 @@ export function createDelegationSignature(agentAddress: string, tier: Tier, expi
   }
 }
 
+// Helper function to query actual delegation from the DelegationRegistry contract
+export async function queryDelegationData(
+  ownerAddress: string,
+  agentAddress: string
+): Promise<{ delegationId: bigint; tier: number; expiresAt: number } | null> {
+  try {
+    const provider = new ethers.JsonRpcProvider(MONAD_TESTNET_RPC);
+    
+    const delegationRegistry = new ethers.Contract(
+      DELEGATION_REGISTRY_ADDRESS || '',
+      DELEGATION_REGISTRY_ABI,
+      provider
+    );
+    
+    // Query the delegation using checkAgentDelegation function
+    const result = await delegationRegistry.checkAgentDelegation(ownerAddress, agentAddress);
+    
+    if (result && result.hasValidDelegation) {
+      console.log('Found valid delegation:', {
+        delegationId: result.delegationId.toString(),
+        tier: result.tier,
+        hasValidDelegation: result.hasValidDelegation
+      });
+      
+      return {
+        delegationId: result.delegationId,
+        tier: result.tier,
+        expiresAt: Math.floor(Date.now() / 1000) + 86400 // Default 24 hours if not available
+      };
+    } else {
+      console.log('No valid delegation found for', { ownerAddress, agentAddress });
+      return null;
+    }
+  } catch (error) {
+    console.error('Failed to query delegation data:', error);
+    return null;
+  }
+}
+
+// Helper function to generate deterministic proof data from delegation
+export function generateProofDataFromDelegation(
+  delegationId: bigint,
+  tier: number,
+  actionType: string
+): { proofId: bigint; root: bigint; nullifierHash: bigint } {
+  // Generate deterministic values based on delegation data
+  // This is still a simplified approach but uses real delegation data
+  
+  // Create a deterministic proofId from delegationId
+  const proofId = delegationId;
+  
+  // Create a deterministic root by hashing delegation data
+  const delegationString = `${delegationId.toString()}-${tier}-${actionType}`;
+  const hash = ethers.keccak256(ethers.toUtf8Bytes(delegationString));
+  const root = BigInt(hash);
+  
+  // Create a deterministic nullifier from proofId + action
+  const nullifierString = `${delegationId.toString()}-${actionType}`;
+  const nullifierHash = BigInt(ethers.keccak256(ethers.toUtf8Bytes(nullifierString)));
+  
+  console.log('Generated proof data from delegation:', {
+    delegationId: delegationId.toString(),
+    tier,
+    actionType,
+    proofId: proofId.toString(),
+    root: root.toString(),
+    nullifierHash: nullifierHash.toString()
+  });
+  
+  return { proofId, root, nullifierHash };
+}
+
 // Helper function to encode the verifyAuthorization function call using ethers.js
 export function verifyAuthorizationSignature(proofId: bigint, root: bigint, nullifierHash: bigint): string {
   try {

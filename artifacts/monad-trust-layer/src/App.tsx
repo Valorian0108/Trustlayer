@@ -42,7 +42,7 @@ import {
   useLocation,
   Router as WouterRouter,
 } from 'wouter';
-import { getContractAddresses, createDelegationSignature, verifyAuthorizationSignature, getEmbeddedWallet } from './contracts';
+import { getContractAddresses, createDelegationSignature, verifyAuthorizationSignature, getEmbeddedWallet, queryDelegationData, generateProofDataFromDelegation } from './contracts';
 import { ethers } from 'ethers';
 import { defineChain } from 'viem';
 
@@ -630,7 +630,7 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
         pushFeed({
           kind: 'pending',
           title: 'Verifying authorization on-chain',
-          detail: 'Submitting proof to AuthorizationVerifier contract via Privy wallet...',
+          detail: 'Querying delegation data and generating proof...',
         });
         
         // Use Privy wallet for real verification
@@ -644,29 +644,48 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
           throw new Error('No embedded wallet available');
         }
         
-        // Generate realistic proof parameters for demo
-        // Note: In production, these would come from actual ZK proof generation
-        const proofId = BigInt(Math.floor(Math.random() * 1000000));
-        const root = BigInt(Math.floor(Math.random() * 1000000));
-        const nullifierHash = BigInt(Math.floor(Math.random() * 1000000));
-        
-        // Build the transaction data
-        const txData = {
-          to: import.meta.env.VITE_AUTHORIZATION_VERIFIER_ADDRESS,
-          data: `0x${verifyAuthorizationSignature(proofId, root, nullifierHash)}`,
-          value: '0x0', // Explicitly set value to 0
-          gas: '0x4C4B40', // Increased gas limit (5,000,000 in hex) to handle contract execution
-        };
-
-
-
-        // Use the proper Privy sendTransaction hook
         try {
+          // Query actual delegation data from the contract
+          const delegationData = await queryDelegationData(wallet.address, agentWallet);
+          
+          if (!delegationData) {
+            throw new Error('No valid delegation found. Please create a delegation first.');
+          }
+          
+          // Generate deterministic proof data from the actual delegation
+          const { proofId, root, nullifierHash } = generateProofDataFromDelegation(
+            delegationData.delegationId,
+            delegationData.tier,
+            'large-purchase'
+          );
+          
+          console.log('Using real delegation data for proof:', {
+            delegationId: delegationData.delegationId.toString(),
+            tier: delegationData.tier,
+            proofId: proofId.toString(),
+            root: root.toString(),
+            nullifierHash: nullifierHash.toString()
+          });
+          
+          // Build the transaction data
+          const txData = {
+            to: import.meta.env.VITE_AUTHORIZATION_VERIFIER_ADDRESS,
+            data: `0x${verifyAuthorizationSignature(proofId, root, nullifierHash)}`,
+            value: '0x0', // Explicitly set value to 0
+            gas: '0x4C4B40', // Increased gas limit (5,000,000 in hex) to handle contract execution
+          };
+          
+          pushFeed({
+            kind: 'pending',
+            title: 'Verifying authorization on-chain',
+            detail: 'Submitting proof to AuthorizationVerifier contract via Privy wallet...',
+          });
+          
+          // Use the proper Privy sendTransaction hook
           const { hash } = await sendTransaction(txData, {
             address: wallet.address,
             uiOptions: { showWalletUIs: false } // Hide default UI
           });
-
           
           setVerificationPhase('approved');
           pushFeed({
@@ -677,43 +696,16 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
           });
           
           setTimeout(() => setVerificationPhase('idle'), 2400);
-        } catch (txError) {
-          console.error('Verification transaction failed:', txError);
-          
-          // Try to extract more detailed error information
-          let errorMessage = 'Unknown error occurred';
-          if (txError instanceof Error) {
-            errorMessage = txError.message;
-            // Check for common contract errors
-            if (errorMessage.includes('execution reverted')) {
-              errorMessage = 'Contract execution reverted - check contract parameters and ensure sufficient gas';
-            } else if (errorMessage.includes('insufficient funds')) {
-              errorMessage = 'Insufficient funds for transaction';
-            } else if (errorMessage.includes('nonce')) {
-              errorMessage = 'Transaction nonce issue - please try again';
-            }
-          }
-          
+        } catch (error) {
+          console.error('Proof verification failed:', error);
+          setVerificationPhase('failed');
           pushFeed({
-            kind: 'blocked',
-            title: 'Verification transaction failed',
-            detail: errorMessage,
+            kind: 'error',
+            title: 'Authorization verification failed',
+            detail: error instanceof Error ? error.message : 'Unknown error occurred'
           });
-          
-          // For hackathon demo, fallback to simulation after showing the error
-          setTimeout(() => {
-            const simulatedHash = '0x' + Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 6);
-            
-            setVerificationPhase('approved');
-            pushFeed({
-              kind: 'success',
-              title: 'Large purchase approved (demo mode)',
-              detail: '$500 action · Using simulation for demo reliability.',
-              transactionHash: simulatedHash
-            });
-            
-            setTimeout(() => setVerificationPhase('idle'), 2400);
-          }, 2000);
+          setTimeout(() => setVerificationPhase('idle'), 3000);
+          return;
         }
       } catch (error) {
         console.error('Real verification failed:', error);
