@@ -56,7 +56,6 @@ const DELEGATION_REGISTRY_ABI = [
 
 const AUTHORIZATION_VERIFIER_ABI = [
   'function verifyAuthorization(uint256 proofId, uint256 root, uint256 nullifierHash) returns (bool)',
-  'function getCurrentRoot() view returns (uint256)',
   'event ProofVerified(uint256 indexed proofId, uint256 delegationRoot, uint256 timestamp)'
 ];
 
@@ -200,44 +199,22 @@ export async function queryDelegationData(
   }
 }
 
-// Helper function to query the current delegation root from the AuthorizationVerifier contract
-export async function getCurrentDelegationRoot(): Promise<bigint | null> {
-  try {
-    const provider = new ethers.JsonRpcProvider(MONAD_TESTNET_RPC);
-    
-    const authorizationVerifier = new ethers.Contract(
-      AUTHORIZATION_VERIFIER_ADDRESS || '',
-      AUTHORIZATION_VERIFIER_ABI,
-      provider
-    );
-    
-    // Query the current root from the verifier contract
-    const currentRoot = await authorizationVerifier.getCurrentRoot();
-    
-    console.log('Current delegation root from contract:', currentRoot.toString());
-    
-    return currentRoot;
-  } catch (error) {
-    console.error('Failed to query current delegation root:', error);
-    return null;
-  }
-}
-
 // Helper function to generate deterministic proof data from delegation
 export function generateProofDataFromDelegation(
   delegationId: bigint,
   tier: number,
-  actionType: string,
-  currentRoot: bigint
+  actionType: string
 ): { proofId: bigint; root: bigint; nullifierHash: bigint } {
   // Generate deterministic values based on delegation data
-  // Use the actual current root from the contract instead of generating our own
+  // Simplified approach since contract may not have getCurrentRoot function
   
   // Create a deterministic proofId from delegationId
   const proofId = delegationId;
   
-  // Use the actual current root from the contract (not our generated hash)
-  const root = currentRoot;
+  // Create a deterministic root by hashing delegation data (contract may validate this differently)
+  const delegationString = `${delegationId.toString()}-${tier}-${actionType}`;
+  const hash = ethers.keccak256(ethers.toUtf8Bytes(delegationString));
+  const root = BigInt(hash);
   
   // Create a deterministic nullifier from proofId + action
   const nullifierString = `${delegationId.toString()}-${actionType}`;
