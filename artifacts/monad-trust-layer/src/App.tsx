@@ -636,8 +636,12 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
         // Query actual delegation data for context (optional, shows system works)
         let delegationData = null;
         try {
-          delegationData = await queryDelegationData(wallet.address, agentWallet?.address || '');
-          console.log('Delegation context:', delegationData);
+          // Get the embedded wallet (to avoid using external wallets like MetaMask)
+          const wallet = getEmbeddedWallet(wallets);
+          if (wallet) {
+            delegationData = await queryDelegationData(wallet.address, agentWallet?.address || '');
+            console.log('Delegation context:', delegationData);
+          }
         } catch (queryError) {
           console.log('Delegation query failed, proceeding with simulation');
         }
