@@ -657,19 +657,28 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
         });
         
         setTimeout(() => setVerificationPhase('idle'), 2400);
-      } else {
-        // Provide more specific error message based on what's missing
-        const missingReqs = [];
-        if (!authenticated) missingReqs.push('owner not authenticated');
-        if (!contractsReady) missingReqs.push('contracts not configured');
-        if (!wallets || wallets.length === 0) missingReqs.push('Privy wallet not available');
-      
+      } catch (error) {
+        console.error('Verification failed:', error);
+        setVerificationPhase('failed');
         pushFeed({
-          kind: 'blocked',
-          title: 'Cannot verify authorization',
-          detail: `Missing requirements: ${missingReqs.join(', ')}. Please complete setup first.`,
+          kind: 'error',
+          title: 'Authorization verification failed',
+          detail: error instanceof Error ? error.message : 'Unknown error occurred'
         });
+        setTimeout(() => setVerificationPhase('idle'), 3000);
       }
+    } else {
+      // Provide more specific error message based on what's missing
+      const missingReqs = [];
+      if (!authenticated) missingReqs.push('owner not authenticated');
+      if (!contractsReady) missingReqs.push('contracts not configured');
+      if (!wallets || wallets.length === 0) missingReqs.push('Privy wallet not available');
+      
+      pushFeed({
+        kind: 'blocked',
+        title: 'Cannot verify authorization',
+        detail: `Missing requirements: ${missingReqs.join(', ')}. Please complete setup first.`,
+      });
     }
   };
 
