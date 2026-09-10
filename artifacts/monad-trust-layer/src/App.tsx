@@ -42,7 +42,7 @@ import {
   useLocation,
   Router as WouterRouter,
 } from 'wouter';
-import { getContractAddresses, createDelegationSignature, verifyAuthorizationSignature, getEmbeddedWallet, queryDelegationData, generateProofDataFromDelegation } from './contracts';
+import { getContractAddresses, createDelegationSignature, verifyAuthorizationSignature, getEmbeddedWallet, queryDelegationData, generateProofDataFromDelegation, getCurrentDelegationRoot } from './contracts';
 import { ethers } from 'ethers';
 import { defineChain } from 'viem';
 
@@ -652,16 +652,25 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
             throw new Error('No valid delegation found. Please create a delegation first.');
           }
           
-          // Generate deterministic proof data from the actual delegation
+          // Query the current delegation root from the AuthorizationVerifier contract
+          const currentRoot = await getCurrentDelegationRoot();
+          
+          if (!currentRoot) {
+            throw new Error('Failed to query current delegation root from contract.');
+          }
+          
+          // Generate deterministic proof data from the actual delegation using the contract's current root
           const { proofId, root, nullifierHash } = generateProofDataFromDelegation(
             delegationData.delegationId,
             delegationData.tier,
-            'large-purchase'
+            'large-purchase',
+            currentRoot
           );
           
           console.log('Using real delegation data for proof:', {
             delegationId: delegationData.delegationId.toString(),
             tier: delegationData.tier,
+            currentRoot: currentRoot.toString(),
             proofId: proofId.toString(),
             root: root.toString(),
             nullifierHash: nullifierHash.toString()
