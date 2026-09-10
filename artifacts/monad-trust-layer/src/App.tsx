@@ -133,7 +133,7 @@ function PrivyOwnerRegistration({
 }
 
 function Home({ privyConfigured }: { privyConfigured: boolean }) {
-  type FeedKind = 'success' | 'pending' | 'info' | 'blocked';
+  type FeedKind = 'success' | 'pending' | 'info' | 'blocked' | 'error';
   type FeedItem = {
     id: string;
     kind: FeedKind;
@@ -142,7 +142,7 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
     time: string;
     transactionHash?: string;
   };
-  type VerificationPhase = 'idle' | 'proof' | 'verify' | 'approved' | 'blocked';
+  type VerificationPhase = 'idle' | 'proof' | 'verify' | 'approved' | 'blocked' | 'failed';
 
   const { ready, authenticated, user, logout } = usePrivy();
   const { wallets } = useWallets();
@@ -646,7 +646,7 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
         
         try {
           // Query actual delegation data from the contract
-          const delegationData = await queryDelegationData(wallet.address, agentWallet);
+          const delegationData = await queryDelegationData(wallet.address, agentWallet?.address || '');
           
           if (!delegationData) {
             throw new Error('No valid delegation found. Please create a delegation first.');
@@ -767,6 +767,7 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
     if (kind === 'success') return <Check size={12} strokeWidth={2.5} />;
     if (kind === 'pending') return <Timer size={12} />;
     if (kind === 'blocked') return <X size={12} />;
+    if (kind === 'error') return <AlertCircle size={12} />;
     return <CircleDot size={12} />;
   };
 
