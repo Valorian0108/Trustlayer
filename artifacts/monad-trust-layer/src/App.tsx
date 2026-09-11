@@ -1068,7 +1068,7 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
                         {verificationPhase === 'proof' &&
                           ' · agent is waiting, not acting.'}
                         {verificationPhase === 'verify' &&
-                          ' · Semaphore / verifier seam.'}
+                          ' · ZK proof verification in progress...'}
                         {verificationPhase === 'approved' &&
                           ' · action may proceed.'}
                         {verificationPhase === 'blocked' &&
