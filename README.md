@@ -1,4 +1,4 @@
-#      Trust Layer
+# Trust Layer
 
 **Proportional Authorization Infrastructure for AI Agents**
 
@@ -38,7 +38,7 @@ The owner signs a one-time authorization that grants their agent permission to a
 For actions below the delegation threshold, the agent acts directly without verification. Nothing meaningful is at risk, so no friction is justified. These transactions settle live on the Monad Testnet.
 
 ### Step 4: High-Stakes Actions
-For actions above the delegation threshold, the agent presents proof that a valid delegation exists. The proof must be signed by a real, registered owner. The verifier contract checks validity, expiry, and revocation status, then approves or rejects without learning which owner authorized it.
+For actions above the delegation threshold, the agent is designed to present a cryptographic proof that a valid delegation exists, checked by the verifier contract without revealing which owner authorized it. In this build, that final check is simulated in the UI for a reliable live demo rather than performed on-chain. The verifier contract is deployed and shaped for real proof-checking as the next step.
 
 ## Architecture Vision
 
@@ -63,32 +63,32 @@ The production implementation will include:
 ## Technology Stack
 
 ### Blockchain Infrastructure
-- Monad Testnet (Chain ID: 10143) - High-performance execution layer
-- DelegationRegistry Contract - On-chain delegation storage and management
-- AuthorizationVerifier Contract - Proof verification interface
+- Monad Testnet (Chain ID: 10143), high-performance execution layer
+- DelegationRegistry Contract, on-chain delegation storage and management
+- AuthorizationVerifier Contract, proof verification interface
 
 ### Identity and Authentication
-- Privy - Passkey-based account creation (WebAuthn/P256)
-- Dual-Wallet Architecture - Privy for owner, EVM wallet for agent
-- No Seed Phrases - Biometric or hardware-backed credentials only
+- Privy, passkey-based account creation (WebAuthn/P256)
+- Dual-Wallet Architecture, Privy for owner, EVM wallet for agent
+- No seed phrases, biometric or hardware-backed credentials only
 
 ### Frontend and Integration
-- React + Vite - Modern, performant frontend framework
-- ethers.js - Type-safe blockchain interaction
-- Etherscan-style Explorer Integration - MonadScan transaction linking
-- Multi-Wallet Support - MetaMask, Rabby, and other EVM wallets
+- React and Vite, modern, performant frontend framework
+- ethers.js, type-safe blockchain interaction
+- Etherscan-style Explorer Integration, MonadScan transaction linking
+- Multi-Wallet Support, MetaMask, Rabby, and other EVM wallets
 
 ## Implementation Status
 
 ### Complete Features
-- Passkey-Based Owner Registration - Full Privy integration with WebAuthn
-- Delegation Tier System - $5 (Micro), $50 (Routine), $500 (Elevated) authorization levels
-- Dual-Wallet Architecture - Secure separation of owner and agent wallets
-- Proportional Action Routing - Automatic low-stakes approval, high-stakes verification
-- Real Blockchain Infrastructure - Transaction signing, hash generation, explorer integration
-- Activity Feed - Real-time transaction status and history
-- Professional Error Handling - Graceful fallbacks and clear user feedback
-- Responsive Dashboard - Single-screen judge-facing trust console
+- Passkey-Based Owner Registration, full Privy integration with WebAuthn
+- Delegation Tier System, $5 (Micro), $50 (Routine), and $500 (Elevated) authorization levels
+- Dual-Wallet Architecture, secure separation of owner and agent wallets
+- Proportional Action Routing, automatic low-stakes approval, high-stakes verification
+- Real Blockchain Infrastructure, transaction signing, hash generation, explorer integration
+- Activity Feed, real-time transaction status and history
+- Professional Error Handling, graceful fallbacks and clear user feedback
+- Responsive Dashboard, single-screen judge-facing trust console
 
 ### Current Limitations
 - High-stakes verification uses simulation for demo presentation
@@ -105,12 +105,12 @@ The application presents a single, comprehensive dashboard:
 - Agent wallet connection
 
 ### Action Console
-- Small purchase simulation ($3) - demonstrates instant approval
-- Large purchase simulation ($500) - demonstrates verification flow
+- Small purchase simulation ($3), demonstrates instant approval
+- Large purchase simulation ($500), demonstrates verification flow
 
 ### Activity Feed
 - Real-time transaction status and hashes
-- Clear success/failure feedback
+- Clear success and failure feedback
 - Explorer links for on-chain verification
 
 ## Deployed Contracts
@@ -123,15 +123,15 @@ The application presents a single, comprehensive dashboard:
 
 ### Current Contract Status
 
-The deployed contracts are currently in demonstration mode. The transaction infrastructure is fully implemented and operational, but the deployed contract instances require redeployment for production use. The demo uses simulation fallbacks to ensure reliable presentation of the trust layer concept.
+Low-stakes transactions settle live on Monad testnet. High-stakes verification is simulated for this demo, pending full ZK proof integration. See Architecture Vision above for the production roadmap.
 
 ## User Guide
 
 ### Getting Started
 
 1. **Prepare Your Environment**
-   - Ensure you have a passkey-capable device (laptop or phone with fingerprint/Face ID/WebAuthn support)
-   - Install an EVM wallet (MetaMask, Rabby, or compatible wallet)
+   - Ensure you have a passkey-capable device (laptop or phone with fingerprint, Face ID, or WebAuthn support)
+   - Install an EVM wallet (MetaMask, Rabby, or a compatible wallet)
    - Configure your wallet for Monad Testnet (Chain ID: 10143)
 
 2. **Obtain Testnet Funds**
@@ -151,7 +151,7 @@ The deployed contracts are currently in demonstration mode. The transaction infr
 
 5. **Connect Agent Wallet**
    - Click "Connect Agent Wallet" in the Trust Setup Panel
-   - Select your EVM wallet (MetaMask, Rabby, etc.)
+   - Select your EVM wallet (MetaMask, Rabby, or similar)
    - Ensure it is on Monad Testnet
    - Approve the connection
 
@@ -162,8 +162,8 @@ The deployed contracts are currently in demonstration mode. The transaction infr
    - Wait for the delegation to be confirmed on-chain
 
 7. **Test Actions**
-   - Try the small purchase ($3) - should approve immediately
-   - Try the large purchase ($500) - should trigger verification flow
+   - Try the small purchase ($3), it should approve immediately
+   - Try the large purchase ($500), it should trigger the verification flow
    - Monitor the activity feed for transaction status
 
 ### Troubleshooting
@@ -192,26 +192,24 @@ The deployed contracts are currently in demonstration mode. The transaction infr
 
 ### Environment Variables
 
-```env
 VITE_PRIVY_APP_ID=cmtrqskxl00rc0cjiaso8qnzf
 VITE_DELEGATION_REGISTRY_ADDRESS=0x088bc310c841fA5ed5b28F37050c3B419572b70d
 VITE_AUTHORIZATION_VERIFIER_ADDRESS=0xEc1d82473aCC8AE1BC1F9B0D79C9dd8a2ee6cFaF
-```
 
 ### Requirements
 
-- Passkey-Capable Device: Laptop or phone with fingerprint/Face ID/WebAuthn support
-- EVM Wallet: MetaMask, Rabby, or compatible wallet for agent integration
-- Monad Testnet Access: Configure wallet for Chain ID 10143
-- Testnet MON: Obtain from Monad faucet for contract interaction
+- Passkey-Capable Device: laptop or phone with fingerprint, Face ID, or WebAuthn support
+- EVM Wallet: MetaMask, Rabby, or a compatible wallet for agent integration
+- Monad Testnet Access: configure wallet for Chain ID 10143
+- Testnet MON: obtain from the Monad faucet for contract interaction
 
 ## Security Considerations
 
-- No Private Keys in Code: All secrets managed through environment variables
-- Privy App ID: Public frontend identifier, not a secret
-- Testnet Only: No real funds at risk
-- Privacy-First Design: Owner identity protected through cryptographic proofs
-- Audit Trail: All authorizations logged on-chain with timestamps
+- No Private Keys in Code: all secrets managed through environment variables
+- Privy App ID: a public frontend identifier, not a secret
+- Testnet Only: no real funds at risk
+- Privacy-First Design: owner identity protected through cryptographic proofs
+- Audit Trail: all authorizations logged on-chain with timestamps
 
 ## Deployment
 
@@ -224,7 +222,7 @@ VITE_AUTHORIZATION_VERIFIER_ADDRESS=0xEc1d82473aCC8AE1BC1F9B0D79C9dd8a2ee6cFaF
 
 **How It Works:**
 
-"First, the owner registers with a passkey, no seed phrase, just their fingerprint or device. That is their identity, cryptographically locked in. Then they sign one authorization, giving their agent permission to act on their behalf up to a certain tier. If the agent does something small, it just happens, no delay, nothing meaningful is at risk. When the agent tries something bigger, it pauses, generates a proof that a real verified owner authorized it, gets that proof checked on-chain, and only then proceeds. The system never has to expose who the owner is, it just confirms the action was properly authorized."
+"First, the owner registers with a passkey, no seed phrase, just their fingerprint or device. That is their identity, cryptographically locked in. Then they sign one authorization, giving their agent permission to act on their behalf up to a certain tier. If the agent does something small, it just happens, no delay, nothing meaningful is at risk. When the agent tries something bigger, it pauses and walks through the verification sequence. In this build, that final check is simulated for a reliable live demo, standing in for the real on-chain proof check the deployed verifier contract is built to perform. The system is designed so it never has to expose who the owner is, it just confirms the action was authorized."
 
 **Why It Matters:**
 
