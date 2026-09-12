@@ -8,6 +8,7 @@ import {
   PrivyProvider,
   usePrivy,
   useSignupWithPasskey,
+  useLogin,
   useWallets,
   useSendTransaction,
   useLogout,
@@ -90,28 +91,22 @@ function PrivyOwnerRegistration({
       onComplete(completedUser);
     },
   });
-  const isBusy = [
+  const { login } = useLogin();
+  
+  const isPasskeyBusy = [
     'generating-challenge',
     'awaiting-passkey',
     'submitting-response',
   ].includes(state.status);
+  
   useEffect(() => {
     if (ready && authenticated && user && !completedRef.current) {
       completedRef.current = true;
       onComplete(user);
     }
   }, [authenticated, onComplete, ready, user]);
-  const label =
-    !ready
-      ? 'Preparing passkey…'
-      : state.status === 'awaiting-passkey'
-      ? 'Complete passkey'
-      : state.status === 'submitting-response'
-        ? 'Verifying passkey…'
-        : state.status === 'generating-challenge'
-          ? 'Preparing passkey…'
-          : 'Register owner';
-  const handleClick = async () => {
+
+  const handlePasskeySignup = async () => {
     try {
       await signupWithPasskey();
     } catch (error) {
@@ -119,16 +114,45 @@ function PrivyOwnerRegistration({
     }
   };
 
+  const handleGeneralLogin = async () => {
+    try {
+      await login();
+    } catch (error) {
+      onError(error);
+    }
+  };
+
+  const passkeyLabel = !ready
+    ? 'Preparing passkey…'
+    : state.status === 'awaiting-passkey'
+      ? 'Complete passkey'
+      : state.status === 'submitting-response'
+        ? 'Verifying passkey…'
+        : state.status === 'generating-challenge'
+          ? 'Preparing passkey…'
+          : 'Passkey';
+
   return (
-    <button
-      className="mini-button"
-      onClick={() => void handleClick()}
-      disabled={isBusy || !ready || authenticated}
-      data-testid="button-register-owner"
-    >
-      <Fingerprint size={13} />
-      {label}
-    </button>
+    <div className="registration-options">
+      <button
+        className="mini-button"
+        onClick={() => void handlePasskeySignup()}
+        disabled={isPasskeyBusy || !ready || authenticated}
+        data-testid="button-register-passkey"
+      >
+        <Fingerprint size={13} />
+        {passkeyLabel}
+      </button>
+      <button
+        className="mini-button secondary"
+        onClick={() => void handleGeneralLogin()}
+        disabled={!ready || authenticated}
+        data-testid="button-login-alternatives"
+      >
+        <KeyRound size={13} />
+        Other methods
+      </button>
+    </div>
   );
 }
 
@@ -1192,7 +1216,7 @@ function App() {
                   theme: 'light',
                   accentColor: '#6366f1',
                 },
-                loginMethods: ['email', 'google', 'github', 'twitter', 'discord', 'apple', 'farcaster'],
+                loginMethods: ['email', 'google', 'github', 'twitter', 'discord', 'apple', 'farcaster', 'passkey'],
                 defaultChain: monadTestnet,
                 supportedChains: [monadTestnet],
               }}

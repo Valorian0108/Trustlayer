@@ -1092,6 +1092,12 @@ select:focus-visible {
   transform: none;
 }
 
+.registration-options {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .registration-gate {
   display: flex;
   align-items: center;
