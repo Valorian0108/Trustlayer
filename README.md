@@ -1,4 +1,4 @@
-# Monad Trust Layer
+#      Trust Layer
 
 **Proportional Authorization Infrastructure for AI Agents**
 
@@ -6,7 +6,7 @@
 
 ## Project Overview
 
-Monad Trust Layer is a novel identity and authorization infrastructure that gives AI agents the same proportional trust instincts humans have: small actions execute immediately, while high-stakes actions require cryptographic proof of authorization from a verified human owner.
+Trust Layer is a novel identity and authorization infrastructure that gives AI agents the same proportional trust instincts humans have: small actions execute immediately, while high-stakes actions require cryptographic proof of authorization from a verified human owner.
 
 This project addresses a fundamental gap in agent security: current systems either trust agents completely or challenge every action. Neither matches how human trust actually works in the real world. A person does not get carded for a $3 coffee, but they do for a $500 purchase. AI agents lack this proportional judgment, making them either reckless or exhaustively over-cautious.
 
