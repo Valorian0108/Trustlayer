@@ -621,7 +621,7 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
     
     // Check if Qwen is configured
     if (!qwenAgent.isAvailable()) {
-      setQwenResponse('Qwen AI Agent is not configured. Please add BITGET_QWEN_API_KEY or VITE_BITGET_QWEN_API_KEY to the environment variables in Vercel project settings.');
+      setQwenResponse('Qwen AI Agent is not configured. Please add QWEN_API_KEY or VITE_QWEN_API_KEY to the environment variables in Vercel project settings.');
       return;
     }
 
@@ -1163,14 +1163,14 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
                     <p className="qwen-description">
                       {qwenAgent.isAvailable() 
                         ? "Let Qwen autonomously manage your portfolio within delegation limits"
-                        : "Add BITGET_QWEN_API_KEY or VITE_BITGET_QWEN_API_KEY in Vercel project settings to enable Qwen AI Agent"
+                        : "Add QWEN_API_KEY or VITE_QWEN_API_KEY in Vercel project settings to enable Qwen AI Agent"
                       }
                     </p>
                     <div className="qwen-input-group">
                       <input
                         type="text"
                         className="qwen-input"
-                        placeholder={qwenAgent.isAvailable() ? "Ask Qwen to manage your portfolio..." : "Qwen not configured - add BITGET_QWEN_API_KEY or VITE_BITGET_QWEN_API_KEY in Vercel settings"}
+                        placeholder={qwenAgent.isAvailable() ? "Ask Qwen to manage your portfolio..." : "Qwen not configured - add QWEN_API_KEY or VITE_QWEN_API_KEY in Vercel settings"}
                         value={qwenPrompt}
                         onChange={(e) => setQwenPrompt(e.target.value)}
                         disabled={qwenProcessing || !delegationActive || !qwenAgent.isAvailable()}

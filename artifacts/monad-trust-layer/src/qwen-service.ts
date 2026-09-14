@@ -1,21 +1,21 @@
 import OpenAI from 'openai';
 
-// Bitget Qwen API configuration for hackathon
-const BITGET_QWEN_API_KEY = import.meta.env.VITE_BITGET_QWEN_API_KEY || import.meta.env.BITGET_QWEN_API_KEY || '';
-const BITGET_BASE_URL = import.meta.env.VITE_BITGET_BASE_URL || 'https://hackathon.bitgetops.com/v1';
-const BITGET_MODEL = 'qwen3.8-max';
+// Alibaba Cloud Qwen API configuration (official endpoint)
+const QWEN_API_KEY = import.meta.env.VITE_QWEN_API_KEY || import.meta.env.QWEN_API_KEY || '';
+const QWEN_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
+const QWEN_MODEL = 'qwen-max';
 
 // Check if API key is available
-const isQwenConfigured = BITGET_QWEN_API_KEY && 
-                        BITGET_QWEN_API_KEY !== 'your_bitget_qwen_api_key_here' &&
-                        BITGET_QWEN_API_KEY.length > 0;
+const isQwenConfigured = QWEN_API_KEY && 
+                        QWEN_API_KEY !== 'your_qwen_api_key_here' &&
+                        QWEN_API_KEY.length > 0;
 
-// Initialize Qwen client with Bitget configuration (only if configured)
+// Initialize Qwen client with Alibaba Cloud configuration (only if configured)
 let qwenClient: OpenAI | null = null;
 if (isQwenConfigured) {
   qwenClient = new OpenAI({
-    apiKey: BITGET_QWEN_API_KEY,
-    baseURL: BITGET_BASE_URL,
+    apiKey: QWEN_API_KEY,
+    baseURL: QWEN_BASE_URL,
     dangerouslyAllowBrowser: true, // Required for browser environment
   });
 }
@@ -141,7 +141,7 @@ export class QwenAgent {
     // Check if Qwen is configured
     if (!isQwenConfigured || !this.client) {
       return {
-        reasoning: 'Qwen AI Agent is not configured. Please add your BITGET_QWEN_API_KEY to the environment variables.',
+        reasoning: 'Qwen AI Agent is not configured. Please add your QWEN_API_KEY to the environment variables.',
         action: 'error',
         requiresAuth: false
       };
@@ -170,7 +170,7 @@ export class QwenAgent {
       Focus on practical, safe financial decisions within the given constraints.`;
 
       const response = await this.client.chat.completions.create({
-        model: BITGET_MODEL,
+        model: QWEN_MODEL,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
