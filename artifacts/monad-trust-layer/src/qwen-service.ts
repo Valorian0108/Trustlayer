@@ -105,7 +105,7 @@ const tools = [
 
 // Qwen agent class
 export class QwenAgent {
-  private client: OpenAI;
+  private client: OpenAI | null;
   private currentDelegationTier: string = 'routine';
   private delegationLimits: Record<string, number> = {
     micro: 5,
@@ -145,6 +145,10 @@ export class QwenAgent {
     }
 
     try {
+      if (!this.client) {
+        throw new Error('Qwen client not configured');
+      }
+
       const systemPrompt = `You are an AI financial agent managing a Monad portfolio with proportional authorization. 
       Current delegation tier: ${this.currentDelegationTier} (limit: ${this.getDelegationLimit()} MON)
       
