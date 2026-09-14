@@ -1,24 +1,15 @@
-import OpenAI from 'openai';
-
 // Bitget Qwen API configuration for hackathon
 const BITGET_QWEN_API_KEY = import.meta.env.VITE_BITGET_QWEN_API_KEY || import.meta.env.BITGET_QWEN_API_KEY || '';
-const BITGET_BASE_URL = 'https://hackathon.bitgetops.com/v1';
+const BITGET_BASE_URL = import.meta.env.VITE_BITGET_BASE_URL || 'https://hackathon.bitgetops.com/v1';
 const BITGET_MODEL = 'qwen3.8-max';
+
+// Use local proxy endpoint to avoid CORS (configured in vite.config.ts)
+const PROXY_URL = '/api/qwen-proxy';
 
 // Check if API key is available
 const isQwenConfigured = BITGET_QWEN_API_KEY && 
                         BITGET_QWEN_API_KEY !== 'your_bitget_qwen_api_key_here' &&
                         BITGET_QWEN_API_KEY.length > 0;
-
-// Initialize Qwen client with Bitget configuration (only if configured)
-let qwenClient: OpenAI | null = null;
-if (isQwenConfigured) {
-  qwenClient = new OpenAI({
-    apiKey: BITGET_QWEN_API_KEY,
-    baseURL: BITGET_BASE_URL,
-    dangerouslyAllowBrowser: true, // Required for browser environment
-  });
-}
 
 // Tool definitions for function calling
 const tools = [
@@ -108,7 +99,6 @@ const tools = [
 
 // Qwen agent class
 export class QwenAgent {
-  private client: OpenAI | null;
   private currentDelegationTier: string = 'routine';
   private delegationLimits: Record<string, number> = {
     micro: 5,
@@ -117,11 +107,11 @@ export class QwenAgent {
   };
 
   constructor() {
-    this.client = qwenClient;
+    // No client initialization needed - using proxy
   }
 
   isAvailable(): boolean {
-    return isQwenConfigured && this.client !== null;
+    return isQwenConfigured;
   }
 
   setDelegationTier(tier: string) {
@@ -139,7 +129,7 @@ export class QwenAgent {
     requiresAuth: boolean;
   }> {
     // Check if Qwen is configured
-    if (!isQwenConfigured || !this.client) {
+    if (!isQwenConfigured) {
       return {
         reasoning: 'Qwen AI Agent is not configured. Please add your BITGET_QWEN_API_KEY to the environment variables.',
         action: 'error',
@@ -148,10 +138,6 @@ export class QwenAgent {
     }
 
     try {
-      if (!this.client) {
-        throw new Error('Qwen client not configured');
-      }
-
       const systemPrompt = `You are an AI financial agent managing a Monad portfolio with proportional authorization. 
       Current delegation tier: ${this.currentDelegationTier} (limit: ${this.getDelegationLimit()} MON)
       
@@ -169,18 +155,34 @@ export class QwenAgent {
       
       Focus on practical, safe financial decisions within the given constraints.`;
 
-      const response = await this.client.chat.completions.create({
-        model: BITGET_MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        tools: tools,
-        tool_choice: 'auto',
-        max_tokens: 1000
+      // Use proxy endpoint to avoid CORS (configured in vite.config.ts)
+      const response = await fetch(PROXY_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          tools: tools,
+          model: BITGET_MODEL
+        })
       });
 
-      const message = response.choices[0].message;
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Proxy error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      const message = data.choices[0].message;
       
       // Check if Qwen wants to use a tool
       if (message.tool_calls && message.tool_calls.length > 0) {
