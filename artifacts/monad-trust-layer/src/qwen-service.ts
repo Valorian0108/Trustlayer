@@ -160,9 +160,11 @@ export class QwenAgent {
       if (message.tool_calls && message.tool_calls.length > 0) {
         const toolCall = message.tool_calls[0];
         
+        // Type guard for function calls
         if (toolCall.type === 'function') {
-          const toolName = toolCall.function.name;
-          const toolArgs = JSON.parse(toolCall.function.arguments || '{}');
+          const functionCall = toolCall as any; // Type assertion for function call
+          const toolName = functionCall.function.name;
+          const toolArgs = JSON.parse(functionCall.function.arguments || '{}');
 
           return {
             reasoning: message.content || 'Executing delegated action',
