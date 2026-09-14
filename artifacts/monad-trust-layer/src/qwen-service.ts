@@ -16,6 +16,7 @@ if (isQwenConfigured) {
   qwenClient = new OpenAI({
     apiKey: BITGET_QWEN_API_KEY,
     baseURL: BITGET_BASE_URL,
+    dangerouslyAllowBrowser: true, // Required for browser environment
   });
 }
 
