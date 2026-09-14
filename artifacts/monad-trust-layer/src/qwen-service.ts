@@ -1,13 +1,14 @@
 import OpenAI from 'openai';
 
-// Qwen API configuration using OpenAI-compatible interface
-const QWEN_API_KEY = import.meta.env.VITE_QWEN_API_KEY || '';
-const QWEN_BASE_URL = import.meta.env.VITE_QWEN_BASE_URL || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
+// Bitget Qwen API configuration for hackathon
+const BITGET_QWEN_API_KEY = import.meta.env.VITE_BITGET_QWEN_API_KEY || '';
+const BITGET_BASE_URL = 'https://hackathon.bitgetops.com/v1';
+const BITGET_MODEL = 'qwen3.8-max';
 
-// Initialize Qwen client
+// Initialize Qwen client with Bitget configuration
 const qwenClient = new OpenAI({
-  apiKey: QWEN_API_KEY,
-  baseURL: QWEN_BASE_URL,
+  apiKey: BITGET_QWEN_API_KEY,
+  baseURL: BITGET_BASE_URL,
 });
 
 // Tool definitions for function calling
@@ -143,14 +144,13 @@ export class QwenAgent {
       Focus on practical, safe financial decisions within the given constraints.`;
 
       const response = await this.client.chat.completions.create({
-        model: 'qwen3.8-max',
+        model: BITGET_MODEL,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
         tools: tools,
         tool_choice: 'auto',
-        reasoning_effort: 'medium', // Balance between cost and quality
         max_tokens: 1000
       });
 
