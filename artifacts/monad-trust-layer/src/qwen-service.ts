@@ -13,7 +13,7 @@ const qwenClient = new OpenAI({
 // Tool definitions for function calling
 const tools = [
   {
-    type: 'function',
+    type: 'function' as const,
     function: {
       name: 'check_delegation_limit',
       description: 'Check the current delegation limit and available spending authority',
@@ -26,12 +26,12 @@ const tools = [
             description: 'The delegation tier to check'
           }
         },
-        required: []
+        required: [] as string[]
       }
     }
   },
   {
-    type: 'function',
+    type: 'function' as const,
     function: {
       name: 'execute_transaction',
       description: 'Execute a transaction within delegation limits',
@@ -52,12 +52,12 @@ const tools = [
             description: 'Reason for this transaction'
           }
         },
-        required: ['amount', 'actionType', 'reason']
+        required: ['amount', 'actionType', 'reason'] as string[]
       }
     }
   },
   {
-    type: 'function',
+    type: 'function' as const,
     function: {
       name: 'request_authorization',
       description: 'Request authorization for a high-stakes action that exceeds immediate delegation limits',
@@ -78,19 +78,19 @@ const tools = [
             description: 'The target delegation tier for this action'
           }
         },
-        required: ['amount', 'reason', 'tier']
+        required: ['amount', 'reason', 'tier'] as string[]
       }
     }
   },
   {
-    type: 'function',
+    type: 'function' as const,
     function: {
       name: 'analyze_portfolio',
       description: 'Analyze current portfolio state and available opportunities',
       parameters: {
         type: 'object',
         properties: {},
-        required: []
+        required: [] as string[]
       }
     }
   }
@@ -159,16 +159,19 @@ export class QwenAgent {
       // Check if Qwen wants to use a tool
       if (message.tool_calls && message.tool_calls.length > 0) {
         const toolCall = message.tool_calls[0];
-        const toolName = toolCall.function.name;
-        const toolArgs = JSON.parse(toolCall.function.arguments || '{}');
+        
+        if (toolCall.type === 'function') {
+          const toolName = toolCall.function.name;
+          const toolArgs = JSON.parse(toolCall.function.arguments || '{}');
 
-        return {
-          reasoning: message.content || 'Executing delegated action',
-          action: toolName,
-          parameters: toolArgs,
-          requiresAuth: toolName === 'request_authorization' || 
-                       (toolName === 'execute_transaction' && toolArgs.amount > 50)
-        };
+          return {
+            reasoning: message.content || 'Executing delegated action',
+            action: toolName,
+            parameters: toolArgs,
+            requiresAuth: toolName === 'request_authorization' || 
+                         (toolName === 'execute_transaction' && toolArgs.amount > 50)
+          };
+        }
       }
 
       // If no tool call, return the reasoning as a plan
