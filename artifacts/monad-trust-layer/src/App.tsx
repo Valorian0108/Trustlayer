@@ -15,6 +15,7 @@ import {
   useCreateWallet,
   type User,
 } from '@privy-io/react-auth';
+import { qwenAgent } from './qwen-service';
 import {
   Activity,
   ArrowRight,
@@ -192,6 +193,11 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
   const [selectedTier, setSelectedTier] = useState('elevated');
   const [verificationPhase, setVerificationPhase] =
     useState<VerificationPhase>('idle');
+  
+  // Qwen AI Agent state
+  const [qwenPrompt, setQwenPrompt] = useState('');
+  const [qwenResponse, setQwenResponse] = useState('');
+  const [qwenProcessing, setQwenProcessing] = useState(false);
   const [contractsReady, setContractsReady] = useState(false);
   const [useRealTransactions, setUseRealTransactions] = useState(false);
   const [agentWallet, setAgentWallet] = useState<{ address: string; connected: boolean } | null>(null);
@@ -608,6 +614,68 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
       title: 'Small purchase auto-approved',
       detail: '$3 action · no proof requested.',
     });
+  };
+
+  const handleQwenRequest = async () => {
+    if (!qwenPrompt.trim() || qwenProcessing) return;
+    
+    setQwenProcessing(true);
+    setQwenResponse('');
+    
+    try {
+      // Update Qwen agent with current delegation tier
+      qwenAgent.setDelegationTier(selectedTier);
+      
+      // Get Qwen's decision
+      const decision = await qwenAgent.makeDecision(qwenPrompt);
+      
+      // Display Qwen's reasoning
+      setQwenResponse(decision.reasoning);
+      
+      // Execute the action based on Qwen's decision
+      if (decision.action === 'execute_transaction' && decision.parameters) {
+        const { amount, actionType, reason } = decision.parameters;
+        
+        if (actionType === 'small' || amount <= 50) {
+          // Execute small action immediately
+          pushFeed({
+            kind: 'success',
+            title: 'Qwen executed small action',
+            detail: `$${amount} action · ${reason}`,
+          });
+        } else {
+          // Request authorization for large action
+          pushFeed({
+            kind: 'pending',
+            title: 'Qwen requesting authorization',
+            detail: `$${amount} action · ${reason}`,
+          });
+          // Trigger the high-stakes flow
+          setVerificationPhase('proof');
+          setTimeout(() => runHighAction(), 1000);
+        }
+      } else if (decision.action === 'request_authorization' && decision.parameters) {
+        const { amount, reason } = decision.parameters;
+        pushFeed({
+          kind: 'pending',
+          title: 'Qwen requesting authorization',
+          detail: `$${amount} action · ${reason}`,
+        });
+        setVerificationPhase('proof');
+        setTimeout(() => runHighAction(), 1000);
+      }
+      
+    } catch (error) {
+      console.error('Qwen error:', error);
+      setQwenResponse(`Error: ${error instanceof Error ? error.message : 'Qwen request failed'}`);
+      pushFeed({
+        kind: 'error',
+        title: 'Qwen decision failed',
+        detail: error instanceof Error ? error.message : 'Unknown error'
+      });
+    } finally {
+      setQwenProcessing(false);
+    }
   };
 
   const runHighAction = async () => {
@@ -1077,6 +1145,47 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
                       <span className="action-name">Large purchase</span>
                       <span className="action-meta">$500 · proof required</span>
                     </button>
+                  </div>
+                  
+                  {/* Qwen AI Agent Section */}
+                  <div className="qwen-section">
+                    <div className="qwen-header">
+                      <Bot size={16} />
+                      <span className="qwen-title">Qwen AI Agent</span>
+                    </div>
+                    <p className="qwen-description">
+                      Let Qwen autonomously manage your portfolio within delegation limits
+                    </p>
+                    <div className="qwen-input-group">
+                      <input
+                        type="text"
+                        className="qwen-input"
+                        placeholder="Ask Qwen to manage your portfolio..."
+                        value={qwenPrompt}
+                        onChange={(e) => setQwenPrompt(e.target.value)}
+                        disabled={qwenProcessing || !delegationActive}
+                        data-testid="qwen-input"
+                      />
+                      <button
+                        className="qwen-button"
+                        onClick={handleQwenRequest}
+                        disabled={qwenProcessing || !delegationActive || !qwenPrompt.trim()}
+                        data-testid="qwen-submit"
+                      >
+                        {qwenProcessing ? 'Processing...' : 'Ask Qwen'}
+                      </button>
+                    </div>
+                    {qwenResponse && (
+                      <div className="qwen-response" data-testid="qwen-response">
+                        <div className="qwen-response-header">
+                          <Bot size={14} />
+                          <span className="qwen-response-title">Qwen Decision</span>
+                        </div>
+                        <div className="qwen-response-content">
+                          {qwenResponse}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   {verificationLabel && (
                     <div className="verification-bar" data-testid="status-verification">

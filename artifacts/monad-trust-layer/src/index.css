@@ -1098,6 +1098,105 @@ select:focus-visible {
   align-items: center;
 }
 
+.qwen-section {
+  margin-top: 20px;
+  padding: 16px;
+  background: var(--muted);
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+.qwen-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.qwen-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.qwen-description {
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.qwen-input-group {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.qwen-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--card);
+  color: var(--ink);
+}
+
+.qwen-input:focus {
+  outline: none;
+  border-color: var(--signal);
+}
+
+.qwen-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.qwen-button {
+  padding: 8px 16px;
+  background: var(--signal);
+  color: var(--card-foreground);
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.qwen-button:hover:not(:disabled) {
+  background: var(--signal-hover);
+}
+
+.qwen-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.qwen-response {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.qwen-response-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.qwen-response-content {
+  font-size: 11px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
 .registration-gate {
   display: flex;
   align-items: center;

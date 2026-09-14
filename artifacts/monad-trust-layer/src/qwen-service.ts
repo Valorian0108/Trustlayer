@@ -1,0 +1,200 @@
+import OpenAI from 'openai';
+
+// Qwen API configuration using OpenAI-compatible interface
+const QWEN_API_KEY = import.meta.env.VITE_QWEN_API_KEY || '';
+const QWEN_BASE_URL = import.meta.env.VITE_QWEN_BASE_URL || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
+
+// Initialize Qwen client
+const qwenClient = new OpenAI({
+  apiKey: QWEN_API_KEY,
+  baseURL: QWEN_BASE_URL,
+});
+
+// Tool definitions for function calling
+const tools = [
+  {
+    type: 'function',
+    function: {
+      name: 'check_delegation_limit',
+      description: 'Check the current delegation limit and available spending authority',
+      parameters: {
+        type: 'object',
+        properties: {
+          tier: {
+            type: 'string',
+            enum: ['micro', 'routine', 'elevated'],
+            description: 'The delegation tier to check'
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'execute_transaction',
+      description: 'Execute a transaction within delegation limits',
+      parameters: {
+        type: 'object',
+        properties: {
+          amount: {
+            type: 'number',
+            description: 'The amount to spend in MON'
+          },
+          actionType: {
+            type: 'string',
+            enum: ['small', 'large'],
+            description: 'Type of action: small (immediate) or large (requires authorization)'
+          },
+          reason: {
+            type: 'string',
+            description: 'Reason for this transaction'
+          }
+        },
+        required: ['amount', 'actionType', 'reason']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'request_authorization',
+      description: 'Request authorization for a high-stakes action that exceeds immediate delegation limits',
+      parameters: {
+        type: 'object',
+        properties: {
+          amount: {
+            type: 'number',
+            description: 'The amount requiring authorization'
+          },
+          reason: {
+            type: 'string',
+            description: 'Detailed reason for this authorization request'
+          },
+          tier: {
+            type: 'string',
+            enum: ['routine', 'elevated'],
+            description: 'The target delegation tier for this action'
+          }
+        },
+        required: ['amount', 'reason', 'tier']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'analyze_portfolio',
+      description: 'Analyze current portfolio state and available opportunities',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      }
+    }
+  }
+];
+
+// Qwen agent class
+export class QwenAgent {
+  private client: OpenAI;
+  private currentDelegationTier: string = 'routine';
+  private delegationLimits: Record<string, number> = {
+    micro: 5,
+    routine: 50,
+    elevated: 500
+  };
+
+  constructor() {
+    this.client = qwenClient;
+  }
+
+  setDelegationTier(tier: string) {
+    this.currentDelegationTier = tier;
+  }
+
+  getDelegationLimit(): number {
+    return this.delegationLimits[this.currentDelegationTier] || 50;
+  }
+
+  async makeDecision(userPrompt: string): Promise<{
+    reasoning: string;
+    action: string;
+    parameters?: any;
+    requiresAuth: boolean;
+  }> {
+    try {
+      const systemPrompt = `You are an AI financial agent managing a Monad portfolio with proportional authorization. 
+      Current delegation tier: ${this.currentDelegationTier} (limit: ${this.getDelegationLimit()} MON)
+      
+      Rules:
+      - Small actions (<$50 routine tier): Execute immediately without authorization
+      - Large actions (>$50 routine tier): Request authorization before execution
+      - Always stay within delegation limits
+      - Explain your reasoning clearly
+      - Use the available tools to interact with the system
+      
+      Available delegation tiers:
+      - micro: $5 limit (immediate execution only)
+      - routine: $50 limit (immediate up to $50, auth above)
+      - elevated: $500 limit (immediate up to $50, auth above)
+      
+      Focus on practical, safe financial decisions within the given constraints.`;
+
+      const response = await this.client.chat.completions.create({
+        model: 'qwen3.8-max',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        tools: tools,
+        tool_choice: 'auto',
+        reasoning_effort: 'medium', // Balance between cost and quality
+        max_tokens: 1000
+      });
+
+      const message = response.choices[0].message;
+      
+      // Check if Qwen wants to use a tool
+      if (message.tool_calls && message.tool_calls.length > 0) {
+        const toolCall = message.tool_calls[0];
+        const toolName = toolCall.function.name;
+        const toolArgs = JSON.parse(toolCall.function.arguments || '{}');
+
+        return {
+          reasoning: message.content || 'Executing delegated action',
+          action: toolName,
+          parameters: toolArgs,
+          requiresAuth: toolName === 'request_authorization' || 
+                       (toolName === 'execute_transaction' && toolArgs.amount > 50)
+        };
+      }
+
+      // If no tool call, return the reasoning as a plan
+      return {
+        reasoning: message.content || 'No action required',
+        action: 'plan',
+        requiresAuth: false
+      };
+
+    } catch (error) {
+      console.error('Qwen API error:', error);
+      throw new Error(`Qwen decision failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async executeSmallTransaction(amount: number, reason: string): Promise<string> {
+    // This would call your existing transaction system
+    // For now, simulate the response
+    return `Executing small transaction: ${amount} MON for ${reason}`;
+  }
+
+  async requestLargeAuth(amount: number, reason: string): Promise<string> {
+    // This would trigger your existing authorization flow
+    return `Requesting authorization for ${amount} MON: ${reason}`;
+  }
+}
+
+// Export singleton instance
+export const qwenAgent = new QwenAgent();
