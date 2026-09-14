@@ -619,6 +619,12 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
   const handleQwenRequest = async () => {
     if (!qwenPrompt.trim() || qwenProcessing) return;
     
+    // Check if Qwen is configured
+    if (!qwenAgent.isAvailable()) {
+      setQwenResponse('Qwen AI Agent is not configured. Please add your BITGET_QWEN_API_KEY to the environment variables in Vercel project settings.');
+      return;
+    }
+
     setQwenProcessing(true);
     setQwenResponse('');
     
@@ -1148,28 +1154,32 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
                   </div>
                   
                   {/* Qwen AI Agent Section */}
-                  <div className="qwen-section">
+                  <div className={`qwen-section ${!qwenAgent.isAvailable() ? 'qwen-not-configured' : ''}`}>
                     <div className="qwen-header">
                       <Bot size={16} />
                       <span className="qwen-title">Qwen AI Agent</span>
+                      {!qwenAgent.isAvailable() && <span className="qwen-status">Not Configured</span>}
                     </div>
                     <p className="qwen-description">
-                      Let Qwen autonomously manage your portfolio within delegation limits
+                      {qwenAgent.isAvailable() 
+                        ? "Let Qwen autonomously manage your portfolio within delegation limits"
+                        : "Add BITGET_QWEN_API_KEY in Vercel project settings to enable Qwen AI Agent"
+                      }
                     </p>
                     <div className="qwen-input-group">
                       <input
                         type="text"
                         className="qwen-input"
-                        placeholder="Ask Qwen to manage your portfolio..."
+                        placeholder={qwenAgent.isAvailable() ? "Ask Qwen to manage your portfolio..." : "Qwen not configured - add API key in Vercel settings"}
                         value={qwenPrompt}
                         onChange={(e) => setQwenPrompt(e.target.value)}
-                        disabled={qwenProcessing || !delegationActive}
+                        disabled={qwenProcessing || !delegationActive || !qwenAgent.isAvailable()}
                         data-testid="qwen-input"
                       />
                       <button
                         className="qwen-button"
                         onClick={handleQwenRequest}
-                        disabled={qwenProcessing || !delegationActive || !qwenPrompt.trim()}
+                        disabled={qwenProcessing || !delegationActive || !qwenPrompt.trim() || !qwenAgent.isAvailable()}
                         data-testid="qwen-submit"
                       >
                         {qwenProcessing ? 'Processing...' : 'Ask Qwen'}

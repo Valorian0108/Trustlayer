@@ -5,11 +5,17 @@ const BITGET_QWEN_API_KEY = import.meta.env.VITE_BITGET_QWEN_API_KEY || '';
 const BITGET_BASE_URL = 'https://hackathon.bitgetops.com/v1';
 const BITGET_MODEL = 'qwen3.8-max';
 
-// Initialize Qwen client with Bitget configuration
-const qwenClient = new OpenAI({
-  apiKey: BITGET_QWEN_API_KEY,
-  baseURL: BITGET_BASE_URL,
-});
+// Check if API key is available
+const isQwenConfigured = BITGET_QWEN_API_KEY && BITGET_QWEN_API_KEY !== 'your_bitget_qwen_api_key_here';
+
+// Initialize Qwen client with Bitget configuration (only if configured)
+let qwenClient: OpenAI | null = null;
+if (isQwenConfigured) {
+  qwenClient = new OpenAI({
+    apiKey: BITGET_QWEN_API_KEY,
+    baseURL: BITGET_BASE_URL,
+  });
+}
 
 // Tool definitions for function calling
 const tools = [
@@ -111,6 +117,10 @@ export class QwenAgent {
     this.client = qwenClient;
   }
 
+  isAvailable(): boolean {
+    return isQwenConfigured && this.client !== null;
+  }
+
   setDelegationTier(tier: string) {
     this.currentDelegationTier = tier;
   }
@@ -125,6 +135,15 @@ export class QwenAgent {
     parameters?: any;
     requiresAuth: boolean;
   }> {
+    // Check if Qwen is configured
+    if (!isQwenConfigured || !this.client) {
+      return {
+        reasoning: 'Qwen AI Agent is not configured. Please add your BITGET_QWEN_API_KEY to the environment variables.',
+        action: 'error',
+        requiresAuth: false
+      };
+    }
+
     try {
       const systemPrompt = `You are an AI financial agent managing a Monad portfolio with proportional authorization. 
       Current delegation tier: ${this.currentDelegationTier} (limit: ${this.getDelegationLimit()} MON)

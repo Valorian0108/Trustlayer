@@ -1106,6 +1106,12 @@ select:focus-visible {
   border: 1px solid var(--line);
 }
 
+.qwen-section.qwen-not-configured {
+  background: var(--destructive);
+  border-color: var(--destructive-border);
+  opacity: 0.7;
+}
+
 .qwen-header {
   display: flex;
   align-items: center;
@@ -1117,6 +1123,18 @@ select:focus-visible {
   font-weight: 600;
   font-size: 13px;
   color: var(--ink);
+}
+
+.qwen-status {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--destructive);
+  color: var(--destructive-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .qwen-description {
@@ -1150,6 +1168,7 @@ select:focus-visible {
 .qwen-input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  background: var(--muted);
 }
 
 .qwen-button {
