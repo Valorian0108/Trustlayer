@@ -59,21 +59,6 @@ export default defineConfig({
     fs: {
       strict: true,
     },
-    proxy: {
-      '/api/qwen-proxy': {
-        target: 'https://hackathon.bitgetops.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/qwen-proxy/, '/v1/chat/completions'),
-        configure: (proxy, options) => {
-          proxy.on('proxyReq', (proxyReq, req, res) => {
-            const apiKey = process.env.BITGET_QWEN_API_KEY || import.meta.env.VITE_BITGET_QWEN_API_KEY || import.meta.env.BITGET_QWEN_API_KEY;
-            if (apiKey) {
-              proxyReq.setHeader('Authorization', `Bearer ${apiKey}`);
-            }
-          });
-        }
-      }
-    }
   },
   preview: {
     port,
