@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 // Alibaba Cloud Qwen API configuration (official endpoint)
 const QWEN_API_KEY = import.meta.env.VITE_QWEN_API_KEY || import.meta.env.QWEN_API_KEY || '';
 const QWEN_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
-const QWEN_MODEL = 'qwen-max';
+const QWEN_MODEL = 'qwen-plus';
 
 // Check if API key is available
 const isQwenConfigured = QWEN_API_KEY && 
