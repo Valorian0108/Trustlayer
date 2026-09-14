@@ -1,12 +1,14 @@
 import OpenAI from 'openai';
 
 // Bitget Qwen API configuration for hackathon
-const BITGET_QWEN_API_KEY = import.meta.env.VITE_BITGET_QWEN_API_KEY || '';
+const BITGET_QWEN_API_KEY = import.meta.env.VITE_BITGET_QWEN_API_KEY || import.meta.env.BITGET_QWEN_API_KEY || '';
 const BITGET_BASE_URL = 'https://hackathon.bitgetops.com/v1';
 const BITGET_MODEL = 'qwen3.8-max';
 
 // Check if API key is available
-const isQwenConfigured = BITGET_QWEN_API_KEY && BITGET_QWEN_API_KEY !== 'your_bitget_qwen_api_key_here';
+const isQwenConfigured = BITGET_QWEN_API_KEY && 
+                        BITGET_QWEN_API_KEY !== 'your_bitget_qwen_api_key_here' &&
+                        BITGET_QWEN_API_KEY.length > 0;
 
 // Initialize Qwen client with Bitget configuration (only if configured)
 let qwenClient: OpenAI | null = null;
