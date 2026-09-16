@@ -1,6 +1,6 @@
 {
   "buildCommand": "pnpm install --frozen-lockfile && PORT=5000 BASE_PATH=/ pnpm run build",
-  "outputDirectory": "artifacts/monad-trust-layer/dist/public",
+  "outputDirectory": "artifacts/monad-trust-layer/dist",
   "framework": "vite",
   "installCommand": "pnpm install --frozen-lockfile",
   "devCommand": "PORT=5000 BASE_PATH=/ pnpm --filter @workspace/monad-trust-layer run dev",
