@@ -1,237 +1,187 @@
 # Trust Layer
 
 **Proportional Authorization Infrastructure for AI Agents**
-
 ---
+Trust Layer is an authorization layer for AI agents that treats actions according to their risk. Small actions can happen with low friction. High-stakes actions require proof that a verified human owner actually authorized the agent.
 
-## Project Overview
+The idea is simple: AI agents should not be trusted with everything by default, and they should not be forced to ask for approval on every tiny action. Human trust does not work that way. Nobody gets stopped for buying a $3 coffee, but a $500 purchase should require stronger proof.
 
-Trust Layer is a novel identity and authorization infrastructure that gives AI agents the same proportional trust instincts humans have: small actions execute immediately, while high-stakes actions require cryptographic proof of authorization from a verified human owner.
+Trust Layer gives agents that proportional instinct.
 
-This project addresses a fundamental gap in agent security: current systems either trust agents completely or challenge every action. Neither matches how human trust actually works in the real world. A person does not get carded for a $3 coffee, but they do for a $500 purchase. AI agents lack this proportional judgment, making them either reckless or exhaustively over-cautious.
+## The Idea
 
-## The Problem
+AI agents are starting to act on behalf of people. They can pay, sign, trade, submit transactions, call APIs, update repos, and make decisions that affect real assets or real accounts.
 
-When an AI agent acts on someone's behalf, paying, signing, or executing an action, most systems treat every action identically. Either the agent is trusted unconditionally, or every single action requires manual approval. This binary approach does not reflect how trust works in practice and creates unnecessary friction or security risks.
+The problem is that most authorization systems are still binary. Either the agent is trusted completely, or every action requires manual approval. Both approaches are bad.
 
-Current agent authorization systems lack the nuanced, context-aware decision-making that humans naturally apply to trust decisions. This limitation prevents agents from operating at scale safely and efficiently.
+If the agent is trusted completely, it can become dangerous. If every action requires approval, the agent becomes too slow to be useful.
 
-## The Solution
+Trust Layer sits in the middle. It lets low-risk actions move quickly while forcing high-risk actions to prove that the human owner gave valid authorization.
 
-A trust layer that gives agents proportional authorization instincts:
+## What Trust Layer Does
 
-- Low-stakes actions execute immediately with zero friction
-- High-stakes actions require the agent to present cryptographic proof that it is genuinely authorized by a verified human owner
-- Privacy-preserving: the verifier confirms authorization without exposing the owner's identity or wallet details
+Trust Layer gives an AI agent a risk-based permission path.
 
-This is identity and trust infrastructure, not a payment solution. Payments are the demo case; the actual deliverable is the verification layer that agents check before acting.
+It allows:
+
+- low-stakes actions to execute immediately;
+- higher-stakes actions to trigger a verification flow;
+- the human owner to register with passkey authentication;
+- the owner to create a delegation for the agent;
+- the delegation to include a tier, expiry, and revocation path;
+- actions to leave an audit trail on-chain;
+- future proof-based verification without exposing the owner's private identity.
+
+Payments are used as the demo case, but the product is not only a payment app. The real product is the authorization layer that an agent checks before acting.
+
+## Why This Matters
+
+AI agents are becoming more capable, but capability without permission control is risky.
+
+A useful agent needs room to act. A safe agent needs limits. Trust Layer is built around that balance.
+
+The product value is strongest in any workflow where an agent can perform actions with different levels of consequence. Examples include payments, trading, signing documents, making purchases, managing repositories, or operating on behalf of a DAO or business account.
+
+The agent should not need human approval for every harmless action. But when the action crosses a meaningful threshold, the agent should prove that it has permission.
 
 ## How It Works
 
-### Step 1: Owner Registration
-The human owner registers using WebAuthn passkey authentication (P256). No seed phrase is required, only biometric or hardware-backed credentials. This becomes the trust anchor for all subsequent authorizations.
+Trust Layer works in four layers.
 
-### Step 2: Delegation Creation
-The owner signs a one-time authorization that grants their agent permission to act on their behalf up to a specific stakes tier. The signature is cryptographically bound to the passkey-registered owner and stored on-chain with tier, expiry, and revocation capabilities.
+1. **Owner identity layer**
 
-### Step 3: Low-Stakes Actions
-For actions below the delegation threshold, the agent acts directly without verification. Nothing meaningful is at risk, so no friction is justified. These transactions settle live on the Monad Testnet.
+   The human owner registers with a passkey using Privy. This avoids seed phrases and uses biometric or hardware-backed authentication through WebAuthn/P256.
 
-### Step 4: High-Stakes Actions
-For actions above the delegation threshold, the agent is designed to present a cryptographic proof that a valid delegation exists, checked by the verifier contract without revealing which owner authorized it. In this build, that final check is simulated in the UI for a reliable live demo rather than performed on-chain. The verifier contract is deployed and shaped for real proof-checking as the next step.
+2. **Delegation layer**
 
-## Architecture Vision
+   The owner creates a delegation for the agent. The delegation defines what level of action the agent is allowed to perform, how long that permission lasts, and how it can be revoked.
 
-In production, this system will utilize Zero-Knowledge Proofs (ZKPs) to confirm authorization without exposing the owner's identity. For this hackathon proof of concept, we simulate this verification flow using a simplified signature-based approach combined with Privy passkey biometric authentication.
+3. **Action routing layer**
 
-The architecture is designed to support full ZK implementation using libraries like Semaphore. The current interface is correctly shaped for anonymous proof generation, with Merkle root management and nullifier hash prevention of replay attacks. The complete cryptographic proof generation is the next production upgrade.
+   When the agent attempts an action, Trust Layer checks the action size or risk tier.
 
-## Hackathon Scope vs Production Roadmap
+   If the action is below the allowed threshold, it can proceed with low friction.
 
-### Hackathon Demo Implementation
-For the hackathon demo, low-stakes transactions are fully integrated and settle live on the Monad Testnet. For high-stakes transactions ($500+), the interface triggers a real Privy passkey biometric flow to simulate human intervention. To preserve the presentation flow and bypass incomplete client-side ZK proof generation under hackathon timelines, the final cryptographic verification step is simulated in the UI via a mock success sequence rather than a live on-chain contract call.
+   If the action is above the threshold, the system triggers a verification flow before the agent can continue.
 
-### Production Roadmap
-The production implementation will include:
-- Full Semaphore or similar ZK proof system integration
-- Complete anonymous verification without exposing owner identity
-- Enhanced Merkle tree management for group membership
-- Optimized proof generation for mobile devices
-- Advanced nullifier management for replay attack prevention
-- Production contract deployment with enhanced security
+4. **Verification layer**
 
-## Technology Stack
+   The long-term design is to verify authorization with privacy-preserving cryptographic proof. The verifier should be able to confirm that the agent is authorized without exposing the owner's identity or wallet details.
 
-### Blockchain Infrastructure
-- Monad Testnet (Chain ID: 10143), high-performance execution layer
-- DelegationRegistry Contract, on-chain delegation storage and management
-- AuthorizationVerifier Contract, proof verification interface
+   In the current hackathon build, low-stakes transactions settle live on Monad Testnet. The high-stakes proof verification flow is simulated in the UI for a reliable demo, while the verifier contract and interface are shaped for a full proof-based implementation.
 
-### Identity and Authentication
-- Privy, passkey-based account creation (WebAuthn/P256)
-- Dual-Wallet Architecture, Privy for owner, EVM wallet for agent
-- No seed phrases, biometric or hardware-backed credentials only
 
-### Frontend and Integration
-- React and Vite, modern, performant frontend framework
-- ethers.js, type-safe blockchain interaction
-- Etherscan-style Explorer Integration, MonadScan transaction linking
-- Multi-Wallet Support, MetaMask, Rabby, and other EVM wallets
+## Current Build
 
-## Implementation Status
+The current build includes:
 
-### Complete Features
-- Passkey-Based Owner Registration, full Privy integration with WebAuthn
-- Delegation Tier System, $5 (Micro), $50 (Routine), and $500 (Elevated) authorization levels
-- Dual-Wallet Architecture, secure separation of owner and agent wallets
-- Proportional Action Routing, automatic low-stakes approval, high-stakes verification
-- Real Blockchain Infrastructure, transaction signing, hash generation, explorer integration
-- Activity Feed, real-time transaction status and history
-- Professional Error Handling, graceful fallbacks and clear user feedback
-- Responsive Dashboard, single-screen judge-facing trust console
+- passkey-based owner registration through Privy;
+- owner and agent wallet separation;
+- delegation tier system with Micro, Routine, and Elevated levels;
+- live low-stakes transaction flow on Monad Testnet;
+- high-stakes verification demo flow;
+- deployed DelegationRegistry contract;
+- deployed AuthorizationVerifier contract interface;
+- transaction hashes and MonadScan links;
+- activity feed for action history;
+- responsive single-screen dashboard for demo presentation.
 
-### Current Limitations
-- High-stakes verification uses simulation for demo presentation
-- Full ZK proof generation requires additional development time
-- Contract instances require redeployment for production use
+The current build is a proof of concept. It demonstrates the proportional authorization flow and the agent permission model. Full anonymous ZK proof generation is not completed yet.
 
-## Demo Experience
+## What Is Live And What Is Simulated
 
-The application presents a single, comprehensive dashboard:
+Live:
 
-### Trust Setup Panel
-- Owner registration with passkey authentication
-- Delegation tier selection and authorization
-- Agent wallet connection
+- owner registration with Privy passkeys;
+- wallet connection;
+- low-stakes transaction flow;
+- Monad Testnet transaction signing;
+- explorer links;
+- delegation and action UI flow.
 
-### Action Console
-- Small purchase simulation ($3), demonstrates instant approval
-- Large purchase simulation ($500), demonstrates verification flow
+Simulated:
 
-### Activity Feed
-- Real-time transaction status and hashes
-- Clear success and failure feedback
-- Explorer links for on-chain verification
+- final high-stakes ZK proof generation;
+- final anonymous on-chain proof verification for elevated actions.
+
+This distinction matters. Trust Layer is not claiming that the full ZK system is production-ready. The current demo proves the product flow, contract direction, and authorization model. The next step is replacing the simulated high-stakes check with real proof generation and verification.
 
 ## Deployed Contracts
 
-**Network**: Monad Testnet (Chain ID: 10143)
-**RPC**: https://testnet-rpc.monad.xyz
+Network:
 
-- DelegationRegistry: 0x088bc310c841fA5ed5b28F37050c3B419572b70d
-- AuthorizationVerifier: 0xEc1d82473aCC8AE1BC1F9B0D79C9dd8a2ee6cFaF
+```text
+Monad Testnet
+Chain ID: 10143
+RPC: https://testnet-rpc.monad.xyz
 
-### Current Contract Status
+Contracts:
 
-Low-stakes transactions settle live on Monad testnet. High-stakes verification is simulated for this demo, pending full ZK proof integration. See Architecture Vision above for the production roadmap.
+DelegationRegistry: 0x088bc310c841fA5ed5b28F37050c3B419572b70d
+AuthorizationVerifier: 0xEc1d82473aCC8AE1BC1F9B0D79C9dd8a2ee6cFaF
 
-## User Guide
+Tools Used
 
-### Getting Started
+- Monad Testnet for live blockchain execution.
+- Privy for passkey-based owner authentication.
+- WebAuthn/P256 for biometric or hardware-backed owner identity.
+- ethers.js for contract and wallet interaction.
+- React and Vite for the frontend.
+- EVM wallets such as MetaMask or Rabby for agent wallet connection.
+- MonadScan for transaction verification.
+- Solidity contracts for delegation and verifier infrastructure.
 
-1. **Prepare Your Environment**
-   - Ensure you have a passkey-capable device (laptop or phone with fingerprint, Face ID, or WebAuthn support)
-   - Install an EVM wallet (MetaMask, Rabby, or a compatible wallet)
-   - Configure your wallet for Monad Testnet (Chain ID: 10143)
+## Demo Flow
 
-2. **Obtain Testnet Funds**
-   - Visit the Monad faucet: https://faucet.monad.xyz
-   - Request testnet MON for your wallet
-   - Wait for the transaction to confirm
+1. Register the owner with a passkey.
+2. Connect an agent wallet.
+3. Create a delegation tier for the agent.
+4. Run a low-stakes action, such as a $3 purchase.
+5. Watch it execute with low friction.
+6. Run a high-stakes action, such as a $500 purchase.
+7. Watch the verification flow trigger before approval.
+8. Review the activity feed and transaction links.
 
-3. **Owner Registration**
-   - Click "Register Owner" in the Trust Setup Panel
-   - Use your passkey (fingerprint or Face ID) to authenticate
-   - This creates your Privy embedded wallet
 
-4. **Fund Your Owner Wallet**
-   - Copy your owner wallet address from the dashboard
-   - Send testnet MON to this address from your EVM wallet
-   - Wait for the transaction to confirm
+## Running Locally
 
-5. **Connect Agent Wallet**
-   - Click "Connect Agent Wallet" in the Trust Setup Panel
-   - Select your EVM wallet (MetaMask, Rabby, or similar)
-   - Ensure it is on Monad Testnet
-   - Approve the connection
+Install dependencies:
+npm install
 
-6. **Create Delegation**
-   - Select a delegation tier (Micro $5, Routine $50, or Elevated $500)
-   - Click "Create Delegation"
-   - Approve the transaction in your owner wallet
-   - Wait for the delegation to be confirmed on-chain
+Start the app:
+npm run dev
 
-7. **Test Actions**
-   - Try the small purchase ($3), it should approve immediately
-   - Try the large purchase ($500), it should trigger the verification flow
-   - Monitor the activity feed for transaction status
+## Environment Variables
 
-### Troubleshooting
+VITE_PRIVY_APP_ID=
+VITE_DELEGATION_REGISTRY_ADDRESS=
+VITE_AUTHORIZATION_VERIFIER_ADDRESS=
 
-**Owner wallet not showing funds?**
-- Check that you sent funds to the correct owner wallet address
-- Wait for the transaction to confirm on the blockchain
-- Refresh the page to update the balance display
+The Privy app ID is a public frontend identifier. Private keys and wallet secrets should never be placed in the frontend code.
 
-**Agent wallet connection failed?**
-- Ensure your EVM wallet is on Monad Testnet (Chain ID: 10143)
-- Check that you have testnet MON in your agent wallet
-- Try disconnecting and reconnecting the wallet
+## Requirements
+- Passkey-capable device such as a laptop or phone with fingerprint, Face ID, or WebAuthn support.
+- EVM wallet such as MetaMask or Rabby.
+- Monad Testnet configured in the wallet.
+- Testnet MON from the Monad faucet.
 
-**Delegation transaction failed?**
-- Ensure your owner wallet has sufficient testnet MON
-- Check that you approved the transaction in your Privy wallet
-- Review the error message in the activity feed for details
+## Security Notes
+Trust Layer is currently a testnet proof of concept.
+No real funds should be used. The system is built for demonstration and research, not production custody.
+The intended production version would require:
+- complete ZK proof generation;
+- stronger verifier contract testing;
+- audited contracts;
+- production-grade revocation logic;
+- replay protection with nullifiers;
+- mobile-friendly proof generation;
+- monitoring and failure handling.
 
-**High-stakes action showing demo mode?**
-- This is expected behavior for the hackathon demo
-- The system simulates ZK proof verification for presentation purposes
-- In production, this would use real cryptographic proof generation
-
-## Configuration
-
-### Environment Variables
-
-VITE_PRIVY_APP_ID=cmtrqskxl00rc0cjiaso8qnzf
-VITE_DELEGATION_REGISTRY_ADDRESS=0x088bc310c841fA5ed5b28F37050c3B419572b70d
-VITE_AUTHORIZATION_VERIFIER_ADDRESS=0xEc1d82473aCC8AE1BC1F9B0D79C9dd8a2ee6cFaF
-
-### Requirements
-
-- Passkey-Capable Device: laptop or phone with fingerprint, Face ID, or WebAuthn support
-- EVM Wallet: MetaMask, Rabby, or a compatible wallet for agent integration
-- Monad Testnet Access: configure wallet for Chain ID 10143
-- Testnet MON: obtain from the Monad faucet for contract interaction
-
-## Security Considerations
-
-- No Private Keys in Code: all secrets managed through environment variables
-- Privy App ID: a public frontend identifier, not a secret
-- Testnet Only: no real funds at risk
-- Privacy-First Design: owner identity protected through cryptographic proofs
-- Audit Trail: all authorizations logged on-chain with timestamps
-
-## Deployment
-
-**Repository**: https://github.com/Valorian0108/Trustlayer
-**Branch**: main
-**Network**: Monad Testnet (Chain ID: 10143)
-**Deployment**: Vercel with automatic builds
-
-## Judge Pitch
-
-**How It Works:**
-
-"First, the owner registers with a passkey, no seed phrase, just their fingerprint or device. That is their identity, cryptographically locked in. Then they sign one authorization, giving their agent permission to act on their behalf up to a certain tier. If the agent does something small, it just happens, no delay, nothing meaningful is at risk. When the agent tries something bigger, it pauses and walks through the verification sequence. In this build, that final check is simulated for a reliable live demo, standing in for the real on-chain proof check the deployed verifier contract is built to perform. The system is designed so it never has to expose who the owner is, it just confirms the action was authorized."
-
-**Why It Matters:**
-
-"AI agents do not yet have the same judgment humans have. Nobody gets carded buying coffee, but they do for a big purchase. This gives agents that proportional instinct, making them both efficient and trustworthy."
-
-**Privacy Implementation:**
-
-"The verifier interface, a Merkle root plus a nullifier hash, is the correct architecture for anonymous membership proof, matching libraries like Semaphore. The current implementation uses a simplified verifier for demonstration. The full cryptographic proof generation is the next production upgrade, which would provide complete anonymity while maintaining authorization verification."
+## Project Direction
+Trust Layer is not trying to make AI agents more powerful. It is trying to make them safer to use.
+The long-term direction is a reusable authorization layer for agentic systems. Any AI agent that acts on behalf of a person, organization, DAO, or wallet should have to operate inside a permission boundary.
+The goal is for agents to become useful without becoming reckless.
+Small action: proceed.
 
 ---
-
-**Built for Monad Metropolis Track 4: Trust, Identity and AI Infrastructure**
+High-stakes action: prove authorization first.
