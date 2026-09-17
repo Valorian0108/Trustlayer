@@ -131,6 +131,7 @@ Trust Layer currently demonstrates three authorization tiers.
 
 The important distinction is that **authorization requirements increase with risk**.
 
+(you can check the "how it works guide" in HOW_IT_WORKS.md)
 ---
 
 # Authorization Model
