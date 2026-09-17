@@ -75,6 +75,8 @@ The human owner establishes their identity using a passkey through Privy.
 
 This creates a verified ownership layer that can be used to authorize an agent.
 
+**Note:** For browsers that don't support WebAuthn, Privy also provides social login methods (email, Google, GitHub, etc.) as a fallback.
+
 ### 2. Agent Delegation
 
 The owner delegates authority to an agent.
@@ -184,7 +186,8 @@ This creates a permission boundary between the human owner and the AI agent.
                               │
                               ▼
                        ┌─────────────┐
-                       │  AI AGENT   │
+                       │  AGENT       │
+                       │  WALLET      │
                        └──────┬──────┘
                               │
                          Action Request
@@ -263,7 +266,7 @@ This is the core idea behind proportional authorization.
 
 # The Security Boundary
 
-Trust Layer treats the AI agent as the **actor**, not the authority.
+Trust Layer treats the agent wallet as the **actor**, not the authority.
 
 ```text
 ┌─────────────────────────────────────┐
@@ -286,13 +289,13 @@ Trust Layer treats the AI agent as the **actor**, not the authority.
                    │
                    ▼
 ┌─────────────────────────────────────┐
-│             AI AGENT                │
+│          AGENT WALLET               │
 │                                     │
 │  Acts within the permission boundary│
 └─────────────────────────────────────┘
 ```
 
-The agent can act autonomously, but its authority is constrained by the authorization layer.
+The agent wallet can act autonomously, but its authority is constrained by the authorization layer.
 
 This means safety does not have to depend entirely on the AI model behaving correctly.
 
@@ -332,7 +335,7 @@ The current implementation demonstrates the high-stakes verification flow, while
 
 Payments are the demo, but authorization is the product.
 
-The same model can apply anywhere an AI agent is given authority to act.
+The same model can apply anywhere an agent wallet is given authority to act.
 
 | Domain              | Lower-Risk Action | Higher-Risk Action           |
 | ------------------- | ----------------- | ---------------------------- |
@@ -360,7 +363,7 @@ Execution
 
 ---
 
-# What The AI Does
+# What The Agent Wallet Does
 
 Trust Layer does not attempt to replace the AI agent.
 
@@ -373,7 +376,7 @@ The AI agent is responsible for:
 
 Trust Layer is responsible for:
 
-* Determining whether the agent has authority
+* Determining whether the agent wallet has authority
 * Applying authorization policies
 * Routing actions according to risk
 * Requiring stronger verification when necessary
@@ -393,13 +396,15 @@ EXECUTION
 "Proceed or reject."
 ```
 
+**Note:** In the current demo, the "agent wallet" is manually controlled by the user via an external wallet (MetaMask, Rabby, etc.) to demonstrate the authorization infrastructure. The system is designed to support autonomous AI agents executing actions within delegated authority boundaries.
+
 ---
 
 # Current Build
 
 The current prototype includes:
 
-* Passkey-based owner registration through Privy(Social login also available through Privy for browsers not supporting WebAuthn)
+* Passkey-based owner registration through Privy (Social login also available through Privy for browsers not supporting WebAuthn)
 * Owner and agent wallet separation
 * Micro, Routine, and Elevated authorization tiers
 * Live low-stakes transactions on Monad Testnet
@@ -421,6 +426,7 @@ The prototype demonstrates the authorization experience and infrastructure direc
 The following components are currently live:
 
 * Privy passkey authentication
+* Privy social login (email, Google, GitHub, etc.)
 * Wallet connection
 * Owner/agent separation
 * Delegation and authorization tier UI
@@ -482,7 +488,7 @@ The goal is to demonstrate the architecture and user experience while establishi
 The intended demonstration is:
 
 ```text
-1. Register owner with passkey
+1. Register owner with passkey or social login
            ↓
 2. Connect agent wallet
            ↓
@@ -538,7 +544,7 @@ VITE_AUTHORIZATION_VERIFIER_ADDRESS=
 
 To run the demo, you need:
 
-* A passkey-capable device
+* A passkey-capable device (or use social login)
 * An EVM wallet
 * Monad Testnet configured
 * Testnet MON
@@ -567,18 +573,18 @@ A production implementation would require additional work, including:
 
 # Threat Model
 
-Trust Layer is designed around the assumption that an AI agent should not automatically inherit unlimited authority from the human who created it.
+Trust Layer is designed around the assumption that an agent wallet should not automatically inherit unlimited authority from the human who created it.
 
 Potential failure cases include:
 
 | Threat                             | Trust Layer Response                                  |
 | ---------------------------------- | ----------------------------------------------------- |
-| Agent attempts unauthorized action | Authorization check                                   |
+| Agent wallet attempts unauthorized action | Authorization check                                   |
 | Delegation expires                 | Reject action                                         |
 | Delegation is revoked              | Reject action                                         |
-| Agent exceeds limits               | Reject or require stronger authorization              |
+| Agent wallet exceeds limits               | Reject or require stronger authorization              |
 | High-value action                  | Route to verification                                 |
-| Compromised agent                  | Limit authority through delegation                    |
+| Compromised agent wallet                  | Limit authority through delegation                    |
 | Replay attempt                     | Production design requires nonce/nullifier mechanisms |
 
 The security model is therefore based on **constrained authority rather than unrestricted trust**.
@@ -589,7 +595,7 @@ The security model is therefore based on **constrained authority rather than unr
 
 ## Phase 1 — Hackathon Prototype
 
-* Passkey owner identity
+* Passkey and social login owner identity
 * Agent wallet separation
 * Delegation tiers
 * Risk-based action routing
@@ -619,7 +625,7 @@ Expand Trust Layer beyond payments into a reusable authorization layer for:
 * Personal agents
 * Autonomous applications
 
-The long-term goal is to provide a standard permission boundary between **humans, AI agents, and the actions those agents are allowed to perform**.
+The long-term goal is to provide a standard permission boundary between **humans, agent wallets, and the actions those agents are allowed to perform**.
 
 ---
 
@@ -636,7 +642,7 @@ Human Owner
      ↓
 Defines Authority
      ↓
-AI Agent
+Agent Wallet
      ↓
 Requests Action
      ↓
@@ -649,7 +655,7 @@ Authorization
 Execution
 ```
 
-Agents should be able to operate independently without being given unlimited authority.
+Agent wallets should be able to operate independently without being given unlimited authority.
 
 That makes Trust Layer applicable anywhere an AI system needs to act on behalf of a person, organization, DAO, wallet, or application.
 
@@ -675,6 +681,10 @@ That makes Trust Layer applicable anywhere an AI system needs to act on behalf o
 └──────────────────────────────────────────────┘
 ```
 
-**Trust Layer gives AI agents room to act without giving them unlimited authority.**
+**Trust Layer gives agent wallets room to act without giving them unlimited authority.**
 
 > **Payments are the demo. Authorization is the product.**
+
+---
+
+**Built for Monad Metropolis Track 4: Trust, Identity and AI Infrastructure**
