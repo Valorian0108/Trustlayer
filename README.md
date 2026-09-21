@@ -1,39 +1,14 @@
 # Trust Layer
 
-**Proportional Authorization Infrastructure for AI Agents**
+## A Proportional Authorization Infrastructure for AI Agents
 
 > **Small action: proceed. High-stakes action: prove authorization first.**
 
-Trust Layer is an authorization layer for AI agents that treats actions according to their risk.
+AI agents are becoming capable of acting on behalf of people.
 
-Small actions can happen with low friction. High-stakes actions require proof that a verified human owner actually authorized the agent.
+They can pay, sign, trade, submit transactions, call APIs, update repositories, make purchases, and make decisions that affect real assets or accounts.
 
-The idea is simple: AI agents should not be trusted with everything by default, and they should not be forced to ask for approval on every tiny action.
-
-Human trust does not work that way.
-
-Nobody gets stopped for buying a $3 coffee, but a $500 purchase should require stronger proof.
-
-**Trust Layer gives agents that proportional instinct.**
-
----
-
-## The Idea
-
-AI agents are starting to act on behalf of people.
-
-They can:
-
-* Pay
-* Sign
-* Trade
-* Submit transactions
-* Call APIs
-* Update repositories
-* Make purchases
-* Make decisions that affect real assets or real accounts
-
-The problem is that most authorization systems are still binary.
+But authorization systems are often still binary:
 
 ```text
 Agent is trusted completely
@@ -43,7 +18,61 @@ Every action requires approval
 
 Neither model works well for autonomous agents.
 
-Trust Layer introduces a third model:
+**Trust Layer introduces proportional authorization.**
+
+Small actions can happen with low friction. Normal actions operate within delegated authority. High-stakes actions require stronger authorization proof.
+
+The goal is not to make agents less autonomous.
+
+The goal is to give them **bounded autonomy**.
+
+---
+
+# The Problem
+
+As AI agents become capable of taking actions on behalf of users, the question is no longer only:
+
+> **What can the agent do?**
+
+It is also:
+
+> **What is the agent actually authorized to do?**
+
+Giving an agent unlimited authority creates an unnecessary security boundary.
+
+Requiring a human to approve every action makes autonomous agents impractical.
+
+Consider two actions:
+
+```text
+$3 purchase
+```
+
+and
+
+```text
+$500 purchase
+```
+
+Treating both actions identically does not reflect how humans normally think about authorization.
+
+Nobody gets stopped for buying a $3 coffee, but a $500 purchase may require stronger proof.
+
+Trust Layer applies the same principle to AI agents.
+
+---
+
+# The Idea
+
+Trust Layer separates:
+
+* **Identity**
+* **Delegation**
+* **Risk**
+* **Authorization**
+* **Execution**
+
+Instead of treating authorization as binary, actions are routed according to their authorization requirements.
 
 ```text
 Low-risk action
@@ -59,29 +88,32 @@ High-stakes action
 Require stronger authorization proof
 ```
 
-The goal is not to make agents less autonomous.
-
-The goal is to give them **bounded autonomy**.
+This creates a permission boundary between the human owner and the AI agent.
 
 ---
 
-## What Trust Layer Does
+# What Trust Layer Does
 
-Trust Layer separates **identity, delegation, risk, and authorization**.
-
-### 1. Owner Identity
+## 1. Owner Identity
 
 The human owner establishes their identity using a passkey through Privy.
 
 This creates a verified ownership layer that can be used to authorize an agent.
 
-**Note:** For browsers that don't support WebAuthn, Privy also provides social login methods (email, Google, GitHub, etc.) as a fallback.
+For browsers that don't support WebAuthn, Privy also provides social login methods such as:
 
-### 2. Agent Delegation
+* Email
+* Google
+* GitHub
+* Other supported Privy login methods
+
+---
+
+## 2. Agent Delegation
 
 The owner delegates authority to an agent.
 
-Delegation can define:
+A delegation can define:
 
 * Authorization tier
 * Limits
@@ -90,54 +122,7 @@ Delegation can define:
 
 The agent receives authority without receiving unlimited control.
 
-### 3. Action Routing
-
-When an agent attempts an action, Trust Layer evaluates the action against its authorization level.
-
-```text
-Agent requests action
-        ↓
-Trust Layer evaluates risk
-        ↓
-┌──────────────────────────────┐
-│ What level of authorization  │
-│ does this action require?    │
-└──────────────┬───────────────┘
-               ↓
-      ┌────────┴────────┐
-      ↓                 ↓
-   Low Risk          High Risk
-      ↓                 ↓
-   Execute          Verify
-```
-
-### 4. Verification
-
-Higher-risk actions require stronger evidence that the human owner authorized the action.
-
-The production direction is privacy-preserving cryptographic verification using zero-knowledge proofs.
-
----
-
-# Authorization Tiers
-
-Trust Layer currently demonstrates three authorization tiers.
-
-| Tier         | Purpose                  | Example                |
-| ------------ | ------------------------ | ---------------------- |
-| **Micro**    | Low-risk actions         | $3 purchase            |
-| **Routine**  | Normal delegated actions | Regular agent activity |
-| **Elevated** | High-stakes actions      | $500 purchase          |
-
-The important distinction is that **authorization requirements increase with risk**.
-
----
-(you can check the "how it works guide" in HOW_IT_WORKS.md)
-
----
-# Authorization Model
-
-A delegation can be thought of conceptually as:
+Conceptually:
 
 ```text
 Delegation {
@@ -165,110 +150,76 @@ Authorized =
     AND action satisfies limits
 ```
 
-This creates a permission boundary between the human owner and the AI agent.
+---
+
+# 3. Action Routing
+
+When an agent attempts an action, Trust Layer evaluates the action against its authorization level.
+
+```text
+Agent requests action
+        ↓
+Trust Layer evaluates risk
+        ↓
+┌──────────────────────────────┐
+│ What level of authorization  │
+│ does this action require?    │
+└──────────────┬───────────────┘
+               ↓
+      ┌────────┴────────┐
+      ↓                 ↓
+   Low Risk          High Risk
+      ↓                 ↓
+   Execute          Verify
+```
+
+The authorization requirement increases with the risk of the action.
 
 ---
 
-# Architecture
+# 4. Verification
+
+Higher-risk actions require stronger evidence that the human owner authorized the action.
+
+The production direction is privacy-preserving cryptographic verification using zero-knowledge proofs.
+
+The intended model is:
 
 ```text
-                         HUMAN OWNER
-                              │
-                        Passkey / Privy
-                              │
-                              ▼
-                    ┌───────────────────┐
-                    │    DELEGATION     │
-                    │                   │
-                    │ Tier              │
-                    │ Limits            │
-                    │ Expiry            │
-                    │ Revocation        │
-                    └─────────┬─────────┘
-                              │
-                              ▼
-                       ┌─────────────┐
-                       │  AGENT       │
-                       │  WALLET      │
-                       └──────┬──────┘
-                              │
-                         Action Request
-                              │
-                              ▼
-                    ┌───────────────────┐
-                    │   TRUST LAYER     │
-                    │                   │
-                    │ Risk Evaluation   │
-                    │ Authorization     │
-                    │ Policy Check      │
-                    └─────────┬─────────┘
-                              │
-                     ┌────────┴────────┐
-                     │                 │
-                     ▼                 ▼
-                  LOW RISK          HIGH RISK
-                     │                 │
-                     ▼                 ▼
-                  EXECUTE            VERIFY
-                                       │
-                              ┌────────┴────────┐
-                              │                 │
-                              ▼                 ▼
-                           ZK Proof           Reject
-                              │
-                              ▼
-                        MONAD TESTNET
+Private authorization information
+              ↓
+         ZK prover
+              ↓
+      Cryptographic proof
+              ↓
+       Public verifier
+              ↓
+      Authorization result
 ```
+
+The current implementation demonstrates the high-stakes verification flow.
+
+Full anonymous ZK proof generation and on-chain verification remain part of the future cryptographic implementation.
 
 ---
 
-# Example
+# Authorization Tiers
 
-### Low-Stakes Action
+Trust Layer currently demonstrates three authorization tiers.
 
-An agent wants to make a **$3 purchase**.
+| Tier     | Purpose                  | Example                |
+| -------- | ------------------------ | ---------------------- |
+| Micro    | Low-risk actions         | $3 purchase            |
+| Routine  | Normal delegated actions | Regular agent activity |
+| Elevated | High-stakes actions      | $500 purchase          |
 
-```text
-Agent
-  ↓
-Request $3 purchase
-  ↓
-Trust Layer
-  ↓
-Within delegated authority
-  ↓
-Execute
-```
-
-The user does not need to manually approve every small action.
-
-### High-Stakes Action
-
-The same agent wants to make a **$500 purchase**.
-
-```text
-Agent
-  ↓
-Request $500 purchase
-  ↓
-Trust Layer
-  ↓
-Higher-risk action detected
-  ↓
-Stronger authorization required
-  ↓
-Verification
-  ↓
-Execute or Reject
-```
-
-This is the core idea behind proportional authorization.
+The important distinction is that authorization requirements increase with risk.
 
 ---
 
 # The Security Boundary
 
-Trust Layer treats the agent wallet as the **actor**, not the authority.
+Trust Layer treats the **agent wallet as the actor, not the authority**.
 
 ```text
 ┌─────────────────────────────────────┐
@@ -303,6 +254,103 @@ This means safety does not have to depend entirely on the AI model behaving corr
 
 ---
 
+# Example
+
+## Low-Stakes Action
+
+An agent wants to make a $3 purchase.
+
+```text
+Agent
+  ↓
+Request $3 purchase
+  ↓
+Trust Layer
+  ↓
+Within delegated authority
+  ↓
+Execute
+```
+
+The user does not need to manually approve every small action.
+
+---
+
+## High-Stakes Action
+
+The same agent wants to make a $500 purchase.
+
+```text
+Agent
+  ↓
+Request $500 purchase
+  ↓
+Higher-risk action detected
+  ↓
+Stronger authorization required
+  ↓
+Verification
+  ↓
+Execute or Reject
+```
+
+This is the core idea behind proportional authorization.
+
+---
+
+# Architecture
+
+```text
+                         HUMAN OWNER
+                              │
+                        Passkey / Privy
+                              │
+                              ▼
+                    ┌───────────────────┐
+                    │    DELEGATION     │
+                    │                   │
+                    │ Tier              │
+                    │ Limits            │
+                    │ Expiry            │
+                    │ Revocation        │
+                    └─────────┬─────────┘
+                              │
+                              ▼
+                       ┌─────────────┐
+                       │    AGENT    │
+                       │    WALLET   │
+                       └──────┬──────┘
+                              │
+                         Action Request
+                              │
+                              ▼
+                    ┌───────────────────┐
+                    │   TRUST LAYER     │
+                    │                   │
+                    │ Risk Evaluation   │
+                    │ Authorization     │
+                    │ Policy Check      │
+                    └─────────┬─────────┘
+                              │
+                     ┌────────┴────────┐
+                     │                 │
+                     ▼                 ▼
+                  LOW RISK          HIGH RISK
+                     │                 │
+                     ▼                 ▼
+                  EXECUTE            VERIFY
+                                       │
+                              ┌────────┴────────┐
+                              │                 │
+                              ▼                 ▼
+                           ZK Proof           Reject
+                              │
+                              ▼
+                        MONAD TESTNET
+```
+
+---
+
 # Why Zero-Knowledge Proofs?
 
 For high-stakes actions, simply saying:
@@ -311,45 +359,37 @@ For high-stakes actions, simply saying:
 
 is not enough.
 
-The system should eventually be able to prove that the required authorization conditions were satisfied **without unnecessarily exposing the owner's identity or private authorization information**.
+The system should eventually be able to prove that the required authorization conditions were satisfied without unnecessarily exposing the owner's identity or private authorization information.
 
 This is where zero-knowledge proofs fit into Trust Layer.
 
-The intended model is:
-
-```text
-Private authorization information
-              ↓
-         ZK prover
-              ↓
-      Cryptographic proof
-              ↓
-       Public verifier
-              ↓
-      Authorization result
-```
-
-The current implementation demonstrates the high-stakes verification flow, while the full anonymous ZK proof generation and on-chain verification remain part of the future cryptographic implementation.
+The current implementation establishes the authorization architecture and demonstrates the high-stakes verification flow. The complete anonymous ZK proof generation and on-chain verification remain part of the roadmap.
 
 ---
+# Why Monad Chain?
 
+The permission boundary needs to govern actions that ultimately affect onchain assets and accounts. Putting the delegation and verification layer onchain gives the authorization state a shared, verifiable source of truth that can be checked independently of the AI agent.
+
+And if agents are going to perform frequent, granular actions, the authorization infrastructure needs an execution environment where those actions are practical at high throughput and low latency. The prototype uses Monad Testnet for that execution layer.
+
+---
 # Beyond Payments
 
-Payments are the demo, but authorization is the product.
+Payments are the current demo, but **authorization is the product**.
 
 The same model can apply anywhere an agent wallet is given authority to act.
 
-| Domain              | Lower-Risk Action | Higher-Risk Action           |
-| ------------------- | ----------------- | ---------------------------- |
-| **Payments**        | $3 purchase       | $500 purchase                |
-| **Trading**         | Small trade       | Large position               |
-| **GitHub**          | Open a PR         | Deploy to production         |
-| **Business**        | Create a document | Sign a contract              |
-| **APIs**            | Read data         | Delete production data       |
-| **DAO**             | Read a proposal   | Execute treasury transaction |
-| **Personal Agents** | Add to cart       | Complete large purchase      |
+| Domain          | Lower-Risk Action | Higher-Risk Action           |
+| --------------- | ----------------- | ---------------------------- |
+| Payments        | $3 purchase       | $500 purchase                |
+| Trading         | Small trade       | Large position               |
+| GitHub          | Open a PR         | Deploy to production         |
+| Business        | Create a document | Sign a contract              |
+| APIs            | Read data         | Delete production data       |
+| DAO             | Read a proposal   | Execute treasury transaction |
+| Personal Agents | Add to cart       | Complete large purchase      |
 
-The underlying infrastructure remains the same:
+The underlying infrastructure remains:
 
 ```text
 Identity
@@ -365,7 +405,7 @@ Execution
 
 ---
 
-# What The Agent Wallet Does
+# What the Agent Does
 
 Trust Layer does not attempt to replace the AI agent.
 
@@ -398,21 +438,20 @@ EXECUTION
 "Proceed or reject."
 ```
 
-**Note:** In the current demo, the "agent wallet" is manually controlled by the user via an external wallet (MetaMask, Rabby, etc.) to demonstrate the authorization infrastructure. The system is designed to support autonomous AI agents executing actions within delegated authority boundaries.
-
 ---
 
 # Current Build
 
 The current prototype includes:
 
-* Passkey-based owner registration through Privy (Social login also available through Privy for browsers not supporting WebAuthn)
+* Passkey-based owner registration through Privy
+* Privy social login for browsers that do not support WebAuthn
 * Owner and agent wallet separation
 * Micro, Routine, and Elevated authorization tiers
 * Live low-stakes transactions on Monad Testnet
 * High-stakes verification demo flow
-* Deployed `DelegationRegistry` contract
-* Deployed `AuthorizationVerifier` contract interface
+* Deployed DelegationRegistry contract
+* Deployed AuthorizationVerifier contract interface
 * Transaction hashes and explorer links
 * Activity feed
 * Responsive dashboard
@@ -423,12 +462,12 @@ The prototype demonstrates the authorization experience and infrastructure direc
 
 # Live vs Simulated
 
-### Live
+## Live
 
 The following components are currently live:
 
 * Privy passkey authentication
-* Privy social login (email, Google, GitHub, etc.)
+* Privy social login
 * Wallet connection
 * Owner/agent separation
 * Delegation and authorization tier UI
@@ -437,7 +476,7 @@ The following components are currently live:
 * Explorer transaction links
 * Activity feed
 
-### Simulated
+## Simulated
 
 The following remains simulated in the current prototype:
 
@@ -450,10 +489,10 @@ The goal is to demonstrate the architecture and user experience while establishi
 
 # Deployed Contracts
 
-## Monad Testnet
+### Monad Testnet
 
 **Network:** Monad Testnet
-**Chain ID:** `10143`
+**Chain ID:** 10143
 **RPC:** `https://testnet-rpc.monad.xyz`
 
 ### DelegationRegistry
@@ -470,7 +509,7 @@ The goal is to demonstrate the architecture and user experience while establishi
 
 ---
 
-# Tools Used
+# Tech Stack
 
 * Monad Testnet
 * Privy
@@ -491,25 +530,25 @@ The intended demonstration is:
 
 ```text
 1. Register owner with passkey or social login
-           ↓
+                    ↓
 2. Connect agent wallet
-           ↓
+                    ↓
 3. Create delegation tier
-           ↓
+                    ↓
 4. Run low-stakes $3 purchase
-           ↓
+                    ↓
 5. Low-friction execution
-           ↓
+                    ↓
 6. Run high-stakes $500 purchase
-           ↓
+                    ↓
 7. Verification is triggered
-           ↓
+                    ↓
 8. Review authorization activity
-           ↓
+                    ↓
 9. Review transaction links
 ```
 
-The demo shows the difference between **acting within delegated authority** and **requiring stronger authorization for a high-stakes action**.
+The demo shows the difference between acting within delegated authority and requiring stronger authorization for a high-stakes action.
 
 ---
 
@@ -526,9 +565,7 @@ Then open:
 http://localhost:5173
 ```
 
----
-
-# Environment Variables
+## Environment Variables
 
 Create a `.env` file containing:
 
@@ -540,16 +577,32 @@ VITE_DELEGATION_REGISTRY_ADDRESS=
 VITE_AUTHORIZATION_VERIFIER_ADDRESS=
 ```
 
----
-
-# Requirements
+## Requirements
 
 To run the demo, you need:
 
-* A passkey-capable device (or use social login)
+* A passkey-capable device, or social login
 * An EVM wallet
 * Monad Testnet configured
 * Testnet MON
+
+---
+
+# Threat Model
+
+Trust Layer is designed around the assumption that an agent wallet should not automatically inherit unlimited authority from the human who created it.
+
+| Threat                                    | Trust Layer Response                                  |
+| ----------------------------------------- | ----------------------------------------------------- |
+| Agent wallet attempts unauthorized action | Authorization check                                   |
+| Delegation expires                        | Reject action                                         |
+| Delegation is revoked                     | Reject action                                         |
+| Agent wallet exceeds limits               | Reject or require stronger authorization              |
+| High-value action                         | Route to verification                                 |
+| Compromised agent wallet                  | Limit authority through delegation                    |
+| Replay attempt                            | Production design requires nonce/nullifier mechanisms |
+
+The security model is therefore based on **constrained authority rather than unrestricted trust**.
 
 ---
 
@@ -573,29 +626,9 @@ A production implementation would require additional work, including:
 
 ---
 
-# Threat Model
-
-Trust Layer is designed around the assumption that an agent wallet should not automatically inherit unlimited authority from the human who created it.
-
-Potential failure cases include:
-
-| Threat                             | Trust Layer Response                                  |
-| ---------------------------------- | ----------------------------------------------------- |
-| Agent wallet attempts unauthorized action | Authorization check                                   |
-| Delegation expires                 | Reject action                                         |
-| Delegation is revoked              | Reject action                                         |
-| Agent wallet exceeds limits               | Reject or require stronger authorization              |
-| High-value action                  | Route to verification                                 |
-| Compromised agent wallet                  | Limit authority through delegation                    |
-| Replay attempt                     | Production design requires nonce/nullifier mechanisms |
-
-The security model is therefore based on **constrained authority rather than unrestricted trust**.
-
----
-
 # Roadmap
 
-## Phase 1 — Hackathon Prototype
+## Phase 1 - Hackathon Prototype
 
 * Passkey and social login owner identity
 * Agent wallet separation
@@ -605,7 +638,7 @@ The security model is therefore based on **constrained authority rather than unr
 * High-stakes verification flow
 * Authorization contracts
 
-## Phase 2 — Cryptographic Authorization
+## Phase 2 - Cryptographic Authorization
 
 * Complete ZK proof generation
 * Anonymous authorization proofs
@@ -615,7 +648,7 @@ The security model is therefore based on **constrained authority rather than unr
 * Stronger delegation policies
 * Improved revocation
 
-## Phase 3 — Agent Authorization Infrastructure
+## Phase 3 - Agent Authorization Infrastructure
 
 Expand Trust Layer beyond payments into a reusable authorization layer for:
 
@@ -627,17 +660,17 @@ Expand Trust Layer beyond payments into a reusable authorization layer for:
 * Personal agents
 * Autonomous applications
 
-The long-term goal is to provide a standard permission boundary between **humans, agent wallets, and the actions those agents are allowed to perform**.
+The long-term goal is to provide a standard permission boundary between humans, agent wallets, and the actions those agents are allowed to perform.
 
 ---
 
 # Project Direction
 
-Trust Layer is not trying to make AI agents more powerful.
+AI agents are becoming capable of acting on behalf of people.
 
-It is trying to make them **safer to use while preserving autonomy**.
+For that to scale, agents need room to act without receiving unlimited authority.
 
-The underlying principle is:
+Trust Layer is designed around that boundary:
 
 ```text
 Human Owner
@@ -657,36 +690,40 @@ Authorization
 Execution
 ```
 
-Agent wallets should be able to operate independently without being given unlimited authority.
+Trust Layer is not trying to make AI agents more powerful.
 
-That makes Trust Layer applicable anywhere an AI system needs to act on behalf of a person, organization, DAO, wallet, or application.
+It is trying to make them safer to use while preserving autonomy.
 
----
-
-# Trust Layer Principle
+The underlying principle is:
 
 ```text
-┌──────────────────────────────────────────────┐
-│                                              │
-│   SMALL ACTION                               │
-│        ↓                                     │
-│     PROCEED                                  │
-│                                              │
-│   NORMAL ACTION                              │
-│        ↓                                     │
-│     DELEGATE                                 │
-│                                              │
-│   HIGH-STAKES ACTION                         │
-│        ↓                                     │
-│   PROVE AUTHORIZATION FIRST                  │
-│                                              │
-└──────────────────────────────────────────────┘
+SMALL ACTION
+     ↓
+  PROCEED
+
+NORMAL ACTION
+     ↓
+ DELEGATE
+
+HIGH-STAKES ACTION
+     ↓
+PROVE AUTHORIZATION FIRST
 ```
 
-**Trust Layer gives agent wallets room to act without giving them unlimited authority.**
+**Agent wallets should be able to operate independently without being given unlimited authority.**
 
-> **Payments are the demo. Authorization is the product.**
+Payments are the demo.
+
+**Authorization is the product.**
 
 ---
 
-**Built for Monad Metropolis Track 4: Trust, Identity and AI Infrastructure**
+# Built for Monad Metropolis
+
+**Track 4 - Trust, Identity & AI Infrastructure**
+
+Trust Layer explores a permission boundary for an onchain economy where AI agents can act on behalf of humans without inheriting unlimited authority.
+
+The core question is simple:
+
+> **If agents are going to act in the onchain economy, what should they be allowed to do - and how can that authority be verified?**
