@@ -91,6 +91,54 @@ Require stronger authorization proof
 This creates a permission boundary between the human owner and the AI agent.
 
 ---
+ Current Build
+
+The current prototype includes:
+
+* Passkey-based owner registration through Privy
+* Privy social login for browsers that do not support WebAuthn
+* Owner and agent wallet separation
+* Micro, Routine, and Elevated authorization tiers
+* Live low-stakes transactions on Monad Testnet
+* High-stakes verification demo flow
+* Deployed DelegationRegistry contract
+* Deployed AuthorizationVerifier contract interface
+* Transaction hashes and explorer links
+* Activity feed
+* Responsive dashboard
+
+The prototype demonstrates the authorization experience and infrastructure direction.
+
+---
+
+# Live vs Simulated
+
+## Live
+
+The following components are currently live:
+
+* Privy passkey authentication
+* Privy social login
+* Wallet connection
+* Owner/agent separation
+* Delegation and authorization tier UI
+* Low-stakes transaction execution
+* Monad Testnet transaction signing
+* Explorer transaction links
+* Activity feed
+
+## Simulated
+
+TThe following remains simulated in the current prototype:
+
+final anonymous ZK proof generation;
+
+full anonymous on-chain proof verification.
+
+The prototype demonstrates the architecture, user experience, and permission boundary. The full cryptographic proof layer remains part of the roadmap.
+
+---
+
 
 # What Trust Layer Does
 
@@ -440,52 +488,7 @@ EXECUTION
 
 ---
 
-# Current Build
-
-The current prototype includes:
-
-* Passkey-based owner registration through Privy
-* Privy social login for browsers that do not support WebAuthn
-* Owner and agent wallet separation
-* Micro, Routine, and Elevated authorization tiers
-* Live low-stakes transactions on Monad Testnet
-* High-stakes verification demo flow
-* Deployed DelegationRegistry contract
-* Deployed AuthorizationVerifier contract interface
-* Transaction hashes and explorer links
-* Activity feed
-* Responsive dashboard
-
-The prototype demonstrates the authorization experience and infrastructure direction.
-
----
-
-# Live vs Simulated
-
-## Live
-
-The following components are currently live:
-
-* Privy passkey authentication
-* Privy social login
-* Wallet connection
-* Owner/agent separation
-* Delegation and authorization tier UI
-* Low-stakes transaction execution
-* Monad Testnet transaction signing
-* Explorer transaction links
-* Activity feed
-
-## Simulated
-
-TThe following remains simulated in the current prototype:
-
-final anonymous ZK proof generation;
-
-full anonymous on-chain proof verification.
-
-The prototype demonstrates the architecture, user experience, and permission boundary. The full cryptographic proof layer remains part of the roadmap.
-
+#
 ---
 
 # Deployed Contracts
