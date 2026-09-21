@@ -478,12 +478,13 @@ The following components are currently live:
 
 ## Simulated
 
-The following remains simulated in the current prototype:
+TThe following remains simulated in the current prototype:
 
-* Final anonymous ZK proof generation
-* Full anonymous on-chain proof verification
+final anonymous ZK proof generation;
 
-The goal is to demonstrate the architecture and user experience while establishing the foundation for the complete cryptographic authorization layer.
+full anonymous on-chain proof verification.
+
+The prototype demonstrates the architecture, user experience, and permission boundary. The full cryptographic proof layer remains part of the roadmap.
 
 ---
 
