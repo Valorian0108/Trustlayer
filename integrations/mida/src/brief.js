@@ -77,6 +77,12 @@ export function validateBrief(brief) {
   } catch {
     throw invalidBrief(brief.id, "amountMon", INVALID_AMOUNT);
   }
+  // viem truncates fractions past 18 decimals instead of refusing — a brief
+  // that asks for 1.0000000000000000001 would silently send 1
+  const fraction = brief.amountMon.split(".")[1];
+  if (fraction !== undefined && fraction.length > 18) {
+    throw invalidBrief(brief.id, "amountMon", "at most 18 decimal places");
+  }
   if (amountWei <= 0n) {
     throw invalidBrief(brief.id, "amountMon", INVALID_AMOUNT);
   }

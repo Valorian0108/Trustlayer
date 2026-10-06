@@ -1,4 +1,5 @@
 import { isMidaSdkError } from "@mida-context/sdk";
+import { zeroAddress } from "viem";
 import { monadTestnet } from "viem/chains";
 import { BriefError, parseBrief, pickBrief, shortId } from "./brief.js";
 import { alreadyDoneLine, decide, noDelegationLine, ownReceiptFor } from "./decide.js";
@@ -113,7 +114,7 @@ async function sendAndAwait({ config, chain, wallet, mida, log, now, delegation,
       expiresAt: delegation.expiresAt,
       owner: delegation.owner,
     },
-    action: { kind: "transfer", to: brief.to, amountMon: brief.amountMon, memo: brief.memo },
+    action: { kind: "transfer", to: brief.to, amountMon: brief.amountMon, amountWei: brief.amountWei.toString(), memo: brief.memo },
     tx: { hash: signed.hash, block: receipt.blockNumber.toString(), status: receipt.status, from: config.agentAddress, chainId: monadTestnet.id },
     at: now().toISOString(),
   };
@@ -223,6 +224,26 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
     log(
       `mida: ${config.midaAgent} approved; brief ${shortId(brief.id)} (${brief.author?.name ?? "owner"}, ${brief.assertedAt ?? "unknown time"}): transfer ${brief.amountMon} MON to ${shortAddr(brief.to)}`
     );
+
+    // The destination must be a plain wallet: not the zero address, not this
+    // agent paying itself, and not a contract — the brief promises a transfer,
+    // and a contract destination could run code instead.
+    const badDestination = (why) => {
+      log(`brief ${shortId(brief.id)}: to is invalid (${why}). Nothing was sent.`);
+      return { exitCode: 2, outcome: "refused" };
+    };
+    if (brief.to === zeroAddress) return badDestination("the zero address");
+    if (brief.to === config.agentAddress) return badDestination("the agent's own address");
+    let destinationCode;
+    try {
+      destinationCode = await chain.getCode({ address: brief.to });
+    } catch (error) {
+      log(`chain: could not check the destination over ${rpcHost(config.rpcUrl)} (${errorClass(error)}). Nothing was sent.`);
+      return { exitCode: 4, outcome: "chain-error" };
+    }
+    if (destinationCode && destinationCode !== "0x") {
+      return badDestination("a contract — this agent sends plain MON transfers, it never calls code");
+    }
 
     let receipts;
     try {

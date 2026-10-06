@@ -48,7 +48,11 @@ export function loadConfig(env) {
     throw invalid("MIDA_AGENT", "1–40 lowercase letters, digits or dashes");
   }
 
-  const projectDir = optional(env, "MIDA_PROJECT") ?? path.resolve(import.meta.dirname, "..");
+  const midaProject = optional(env, "MIDA_PROJECT");
+  if (midaProject !== undefined && !path.isAbsolute(midaProject)) {
+    throw invalid("MIDA_PROJECT", "an absolute path");
+  }
+  const projectDir = midaProject ?? path.resolve(import.meta.dirname, "..");
   const rpcUrl = optional(env, "MONAD_RPC_URL") ?? DEFAULT_RPC_URL;
   const registry = checkedAddress(optional(env, "DELEGATION_REGISTRY") ?? DEFAULT_REGISTRY, "DELEGATION_REGISTRY");
 

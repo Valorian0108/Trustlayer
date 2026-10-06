@@ -76,6 +76,12 @@ export async function readDelegation(chain, { registry, owner, agent, rpcUrl }) 
   }
   const tier = Number(delegation.tier);
   const { name, label } = tierInfo(tier);
+  // A unix timestamp beyond ~8.64e12 seconds overflows Date — treat it like
+  // the max-uint sentinel the registry uses for "never"
+  const expiresAt =
+    delegation.expiresAt === 0n || delegation.expiresAt > 8_640_000_000_000n
+      ? null
+      : new Date(Number(delegation.expiresAt) * 1000).toISOString();
   return {
     valid: true,
     owner,
@@ -84,6 +90,6 @@ export async function readDelegation(chain, { registry, owner, agent, rpcUrl }) 
     tier,
     tierName: name,
     tierLabel: label,
-    expiresAt: delegation.expiresAt === 0n ? null : new Date(Number(delegation.expiresAt) * 1000).toISOString(),
+    expiresAt,
   };
 }

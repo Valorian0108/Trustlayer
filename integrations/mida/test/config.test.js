@@ -61,6 +61,14 @@ describe("loadConfig", () => {
     );
   });
 
+  it("rejects a relative MIDA_PROJECT when one is set", () => {
+    const env = { ...validEnv(), MIDA_PROJECT: "relative/path" };
+    const error = capture(() => loadConfig(env));
+    expect(error.message).toBe(
+      "config: MIDA_PROJECT is missing or invalid (an absolute path). Nothing was sent."
+    );
+  });
+
   it("returns the config with defaults for a full valid env", () => {
     const env = validEnv();
     const config = loadConfig(env);

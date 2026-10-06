@@ -69,13 +69,15 @@ function receiptItem(id, briefRecordId, hash = TX_HASH, overrides = {}) {
   };
 }
 
-function makeChain({ delegation = [true, 29n, 1], details, balanceWei = parseEther("1"), gasPriceWei = 1_000_000_000n, pendingNonce = 7n, latestNonce = 7n, code = "0x" } = {}) {
+function makeChain({ delegation = [true, 29n, 1], details, balanceWei = parseEther("1"), gasPriceWei = 1_000_000_000n, pendingNonce = 7n, latestNonce = 7n, code = "0x", codeError } = {}) {
   const readContractCalls = [];
+  const codeCalls = [];
   const struct = details ?? {
     owner: OWNER, agent: AGENT_ADDR, tier: 1, createdAt: 1n, expiresAt: 1791345514n, active: true, revoked: false,
   };
   return {
     readContractCalls,
+    codeCalls,
     async readContract(input) {
       readContractCalls.push(input);
       return input.functionName === "checkAgentDelegation" ? delegation : struct;
@@ -83,7 +85,11 @@ function makeChain({ delegation = [true, 29n, 1], details, balanceWei = parseEth
     async getBalance() { return balanceWei; },
     async getGasPrice() { return gasPriceWei; },
     async getTransactionCount({ blockTag }) { return blockTag === "latest" ? latestNonce : pendingNonce; },
-    async getCode() { return code; },
+    async getCode(input) {
+      codeCalls.push(input);
+      if (codeError) throw codeError;
+      return code;
+    },
   };
 }
 
@@ -241,7 +247,7 @@ describe("runAgent", () => {
         expiresAt: EXPIRES_ISO,
         owner: OWNER,
       },
-      action: { kind: "transfer", to: TO, amountMon: "0.01", memo: "TrustLayer x Mida demo" },
+      action: { kind: "transfer", to: TO, amountMon: "0.01", amountWei: "10000000000000000", memo: "TrustLayer x Mida demo" },
       tx: { hash: txHash, block: "68990001", status: "success", from: AGENT_ADDR, chainId: 10143 },
       at: NOW_ISO,
     });
@@ -356,6 +362,75 @@ describe("runAgent", () => {
     ]);
     expect(wallet.sendRaws).toHaveLength(0);
     expect(mida.rememberCalls).toHaveLength(0);
+  });
+
+  it("refuses a brief whose destination is the zero address", async () => {
+    const mida = makeMida({
+      factsPages: [{ items: [briefFact(BRIEF_ID, '{"trustlayer":1,"action":"transfer","to":"0x0000000000000000000000000000000000000000","amountMon":"0.01"}')], cursor: null }],
+    });
+    const wallet = makeWallet();
+    const { result, lines } = await run({ mida, wallet });
+    expect(result.exitCode).toBe(2);
+    expect(lines.at(-1)).toContain("to is invalid");
+    expect(lines.at(-1)).toContain("zero address");
+    expect(wallet.sendRaws).toHaveLength(0);
+    expect(mida.rememberCalls).toHaveLength(0);
+  });
+
+  it("refuses a brief whose destination is the agent's own address", async () => {
+    const mida = makeMida({
+      factsPages: [{ items: [briefFact(BRIEF_ID, `{"trustlayer":1,"action":"transfer","to":"${AGENT_ADDR}","amountMon":"0.01"}`)], cursor: null }],
+    });
+    const wallet = makeWallet();
+    const { result, lines } = await run({ mida, wallet });
+    expect(result.exitCode).toBe(2);
+    expect(lines.at(-1)).toContain("to is invalid");
+    expect(lines.at(-1)).toContain("own address");
+    expect(wallet.sendRaws).toHaveLength(0);
+  });
+
+  it("refuses a brief whose destination holds contract code — one getCode call, no send", async () => {
+    // the README promises plain transfers only; a contract destination could run code
+    const chain = makeChain({ code: "0x6000" });
+    const mida = makeMida();
+    const wallet = makeWallet();
+    const { result, lines } = await run({ chain, mida, wallet });
+    expect(result.exitCode).toBe(2);
+    expect(chain.codeCalls).toEqual([{ address: TO }]);
+    expect(lines.at(-1)).toContain("to is invalid");
+    expect(lines.at(-1)).toContain("contract");
+    expect(wallet.sendRaws).toHaveLength(0);
+    expect(mida.rememberCalls).toHaveLength(0);
+  });
+
+  it("exits 4 when the destination check cannot reach the chain", async () => {
+    const chain = makeChain({ codeError: new Error("socket closed") });
+    const wallet = makeWallet();
+    const { result, lines } = await run({ chain, wallet });
+    expect(result.exitCode).toBe(4);
+    expect(lines.at(-1)).toContain("could not check the destination");
+    expect(lines.at(-1)).toContain("Nothing was sent.");
+    expect(wallet.sendRaws).toHaveLength(0);
+  });
+
+  it("checks the balance against exactly the fee the signed transaction bids", async () => {
+    // balance = amount + 21000 * gasPrice passes; one wei less must refuse —
+    // and the fee the check used is the fee the signature carries
+    const gasPriceWei = 2_000_000_000n;
+    const amountWei = parseEther("0.01");
+    const wallet = makeWallet();
+    const chain = makeChain({ balanceWei: amountWei + 21_000n * gasPriceWei, gasPriceWei });
+    const { result } = await run({ chain, wallet });
+    expect(result.exitCode).toBe(0);
+    expect(wallet.signCalls[0].gasPrice).toBe(gasPriceWei);
+    expect(wallet.signCalls[0].gas).toBe(21_000n);
+
+    const wallet2 = makeWallet();
+    const short = makeChain({ balanceWei: amountWei + 21_000n * gasPriceWei - 1n, gasPriceWei });
+    const { result: result2, lines: lines2 } = await run({ chain: short, wallet: wallet2 });
+    expect(result2.exitCode).toBe(2);
+    expect(lines2.at(-1)).toContain("plus gas");
+    expect(wallet2.sendRaws).toHaveLength(0);
   });
 
   it("reports already-done and sends nothing when a receipt names the brief", async () => {

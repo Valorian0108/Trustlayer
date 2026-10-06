@@ -72,6 +72,12 @@ describe("readDelegation", () => {
     expect(result.expiresAt).toBeNull();
   });
 
+  it("maps a huge expiresAt — the max-uint 'never' — to null instead of crashing", async () => {
+    const chain = validChain({ expiresAt: 2n ** 256n - 1n });
+    const result = await readDelegation(chain, { registry: REGISTRY, owner: OWNER, agent: AGENT, rpcUrl: RPC_URL });
+    expect(result.expiresAt).toBeNull();
+  });
+
   it("names tier 0 Basic with the app's Micro label", async () => {
     const chain = validChain({ tier: 0 });
     const result = await readDelegation(chain, { registry: REGISTRY, owner: OWNER, agent: AGENT, rpcUrl: RPC_URL });

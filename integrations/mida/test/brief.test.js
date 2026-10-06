@@ -138,6 +138,14 @@ describe("validateBrief", () => {
     expect(error.message).toBe('brief 0xd9d35dc2…: amountMon is invalid (a positive decimal number of MON, e.g. "0.01"). Nothing was sent.');
   });
 
+  it.each(["1.0000000000000000001", "0.01000000000000000001", "49.9999999999999999999"])(
+    "refuses amountMon %s — past 18 decimals it would silently round, never refuse",
+    (amountMon) => {
+      const error = captureBrief({ ...good, amountMon });
+      expect(error.message).toContain("18 decimal places");
+    }
+  );
+
   it("refuses a memo over 200 characters", () => {
     const error = captureBrief({ ...good, memo: "x".repeat(201) });
     expect(error.message).toBe("brief 0xd9d35dc2…: memo is invalid (a string of at most 200 characters). Nothing was sent.");
