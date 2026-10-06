@@ -225,7 +225,9 @@ async function sendAndAwait({ config, chain, wallet, mida, log, now, journal, de
       : `sent: ${brief.amountMon} MON to ${shortAddr(brief.to)} — tx ${signed.hash} (block ${receipt.blockNumber.toLocaleString("en-US")})`
   );
 
-  const content = receiptContent({ config, delegation, brief, hash: signed.hash, receipt, now });
+  // a recovered entry records the delegation it was signed under — the owner
+  // may have re-delegated under a new id between runs
+  const content = receiptContent({ config, delegation: { ...delegation, id: signed.delegationId ?? delegation.id }, brief, hash: signed.hash, receipt, now });
   let saved;
   try {
     saved = await mida.remember({ namespace: RECEIPT_NAMESPACE, kind: "EPISODE", content });
@@ -284,7 +286,7 @@ async function resolveJournalEntry({ config, chain, wallet, mida, log, now, jour
         amountWei: decoded.value ?? 0n,
         memo: entry.memo,
       };
-      const content = receiptContent({ config, delegation, brief: recoveredBrief, hash: entry.hash, receipt, now });
+      const content = receiptContent({ config, delegation: { ...delegation, id: entry.delegationId ?? delegation.id }, brief: recoveredBrief, hash: entry.hash, receipt, now });
       try {
         const saved = await mida.remember({ namespace: RECEIPT_NAMESPACE, kind: "EPISODE", content });
         markJournalReceipted(config.projectDir, journal, entryId, { id: saved.id, at: now().toISOString() });
@@ -343,6 +345,10 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
     }
     throw error;
   }
+  // the hash of anything this run signed or re-broadcast — attached to an
+  // unexpected error so the cli line can name it instead of claiming nothing
+  // happened
+  let signedTxHash = null;
   try {
     let delegation;
     try {
@@ -400,7 +406,7 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
     const picked = pickBrief(facts);
     if (!picked) {
       log(
-        `mida: no brief found in preferences.communication. Write one with: mida remember '{"trustlayer":1,"action":"transfer","to":"0x…","amountMon":"0.01"}'. Nothing was sent.`
+        `mida: no brief found in preferences.communication. Write one with: MIDA_HOME=$HOME/.mida-trustlayer mida remember '{"trustlayer":1,"action":"transfer","to":"0x…","amountMon":"0.01"}'. Nothing was sent.`
       );
       return { exitCode: 2, outcome: "refused" };
     }
@@ -513,6 +519,7 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
           );
           return { exitCode: 4, outcome: "journal-invalid", txHash: entry.hash };
         }
+        signedTxHash = entry.hash;
         return await sendAndAwait({ config, chain, wallet, mida, log, now, journal, delegation, brief, signed: entry, recovery: true });
       }
       const ownReceipt = ownReceiptFor(receipts, entryId, config.midaAgent);
@@ -527,6 +534,7 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
         blockedDryRun = true;
         continue;
       }
+      signedTxHash = entry.hash;
       const state = await resolveJournalEntry({ config, chain, wallet, mida, log, now, journal, delegation, entryId, entry });
       if (state === "invalid") return { exitCode: 4, outcome: "journal-invalid", txHash: entry.hash };
       if (state === "unresolved") {
@@ -580,6 +588,7 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
       log(`chain: could not prepare the transaction over ${rpcHost(config.rpcUrl)} (${errorClass(error)}). Nothing was sent.`);
       return { exitCode: 4, outcome: "chain-error" };
     }
+    signedTxHash = prepared.hash;
     writeJournalEntry(config.projectDir, journal, brief.id, {
       hash: prepared.hash,
       raw: prepared.raw,
@@ -587,8 +596,18 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
       to: brief.to,
       value: brief.amountWei.toString(),
       memo: brief.memo,
+      delegationId: delegation.id,
     });
     return await sendAndAwait({ config, chain, wallet, mida, log, now, journal, delegation, brief, signed: { ...prepared, nonce: Number(nonce) }, recovery: false });
+  } catch (error) {
+    if (signedTxHash && error && typeof error === "object") {
+      try {
+        error.txHash = signedTxHash;
+      } catch {
+        // a frozen error object degrades the line to the name only
+      }
+    }
+    throw error;
   } finally {
     lock.release();
   }

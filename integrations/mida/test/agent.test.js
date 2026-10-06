@@ -460,7 +460,7 @@ describe("runAgent", () => {
     expect(result.exitCode).toBe(2);
     expect(lines).toEqual([
       `trustlayer: delegation #29 from 0x1234…abcd to ${SHORT_AGENT} — tier Routine ($50), expires ${EXPIRES_ISO}`,
-      `mida: no brief found in preferences.communication. Write one with: mida remember '{"trustlayer":1,"action":"transfer","to":"0x…","amountMon":"0.01"}'. Nothing was sent.`,
+      `mida: no brief found in preferences.communication. Write one with: MIDA_HOME=$HOME/.mida-trustlayer mida remember '{"trustlayer":1,"action":"transfer","to":"0x…","amountMon":"0.01"}'. Nothing was sent.`,
     ]);
     expect(wallet.sendRaws).toHaveLength(0);
     expect(mida.rememberCalls).toHaveLength(0);
@@ -581,6 +581,7 @@ describe("runAgent", () => {
       to: TO,
       value: "10000000000000000",
       memo: "TrustLayer x Mida demo",
+      delegationId: "29",
     });
   });
 
@@ -836,6 +837,25 @@ describe("runAgent", () => {
     expect(lines.at(-1)).toContain("0.02");
     expect(mida.rememberCalls).toHaveLength(0);
     expect(node.payments).toHaveLength(1);
+  });
+
+  it("stores the delegation id in the journal and uses it in a recovered receipt", async () => {
+    // the owner may re-delegate under a new id between runs — a recovered
+    // receipt must still name the delegation that actually authorized the pay
+    const dir = tmpDir();
+    const node = makeNode();
+    const chain = makeChain({ node, receiptPlan: ["throw", "ok"] });
+    const wallet = makeWallet({ node, waitPlan: ["timeout"] });
+    const first = await run({ chain, wallet, projectDir: dir });
+    expect(first.result.exitCode).toBe(4);
+    const journal = JSON.parse(fs.readFileSync(path.join(dir, ".trustlayer-journal.json"), "utf8"));
+    expect(journal[BRIEF_ID].delegationId).toBe("29");
+
+    const chain2 = makeChain({ node, delegation: [true, 30n, 1] });
+    const mida2 = makeMida();
+    const second = await run({ chain: chain2, wallet, mida: mida2, projectDir: dir });
+    expect(second.result.exitCode).toBe(0);
+    expect(mida2.rememberCalls[0].content.delegation.id).toBe("29");
   });
 
   it("send error: no 'Nothing was sent', re-run re-sends the same bytes", async () => {

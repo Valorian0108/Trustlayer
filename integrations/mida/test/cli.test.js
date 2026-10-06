@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { parseEther } from "viem";
+import { keccak256, parseEther } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { monadTestnet } from "viem/chains";
 import { main, parseArgs, UsageError } from "../src/cli.js";
@@ -136,5 +136,45 @@ describe("main", () => {
     // the delegation read still happened first — Mida is only touched after it passes
     expect(mida.context).toHaveBeenCalled();
     expect(code).toBe(2); // the fake serves no brief, so the run refuses after status
+  });
+
+  it("an unexpected error after signing names the hash and the unknown outcome, never 'Nothing more was done'", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const key = generatePrivateKey();
+    const account = privateKeyToAccount(key);
+    let raw;
+    const wallet = {
+      async signTransfer({ to, value, nonce, gas, maxFeePerGas, maxPriorityFeePerGas }) {
+        raw = await account.signTransaction({ type: "eip1559", chainId: monadTestnet.id, nonce, to, value, gas, maxFeePerGas, maxPriorityFeePerGas });
+        return { raw, hash: keccak256(raw) };
+      },
+      async sendRawTransaction() { return keccak256(raw); },
+      async waitForTransactionReceipt() { return { status: "success", blockNumber: 1n, transactionHash: keccak256(raw) }; },
+    };
+    const brief = {
+      id: "0xd9d35dc2c50055f8",
+      namespace: "preferences.communication",
+      kind: "PREFERENCE",
+      content: { text: `{"trustlayer":1,"action":"transfer","to":"${TO}","amountMon":"0.01","memo":"x"}`, assertedAt: "2026-10-09T08:50:12Z" },
+      author: { name: null, id: "0x" + "0".repeat(64) },
+      source: "USER_ASSERTED",
+      writtenAt: "2026-10-09T08:50:12Z",
+      state: "anchored",
+    };
+    const fakeMida = {
+      status: vi.fn(async () => ({ up: true, text: "approved" })),
+      context: vi.fn(async ({ namespace }) => ({ items: namespace === "preferences.communication" ? [brief] : [], cursor: null })),
+      // a non-SDK error — the kind only the unexpected line can cover
+      remember: vi.fn(async () => { throw new TypeError("the SDK shape changed under us"); }),
+    };
+    const { deps: injected } = deps({ delegation: [true, 29n, 1], mida: fakeMida });
+    injected.createWallet = () => wallet;
+    const code = await main([], envFor(key), injected);
+    expect(code).toBe(1);
+    const line = console.log.mock.calls.at(-1)[0];
+    expect(line).toContain("unexpected: TypeError");
+    expect(line).toContain(keccak256(raw));
+    expect(line).toContain("unknown");
+    expect(line).not.toContain("Nothing more was done");
   });
 });

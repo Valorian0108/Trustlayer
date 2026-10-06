@@ -49,7 +49,19 @@ export async function main(
   const chain = makeChain(config);
   const wallet = makeWallet(config);
   const mida = makeMida(config);
-  const { exitCode } = await runAgent({ config, chain, wallet, mida, log: console.log, dryRun: flags.dryRun });
+  let exitCode;
+  try {
+    ({ exitCode } = await runAgent({ config, chain, wallet, mida, log: console.log, dryRun: flags.dryRun }));
+  } catch (error) {
+    // a run that signed or broadcast carries its hash on the error — the line
+    // must name it and call the outcome unknown, never claim nothing happened
+    console.log(
+      error?.txHash
+        ? `unexpected: ${error instanceof Error ? error.name : "Error"} — this run signed tx ${error.txHash}; whether it landed is unknown.`
+        : `unexpected: ${error instanceof Error ? error.name : "Error"}. Nothing more was done.`
+    );
+    return 1;
+  }
   return exitCode;
 }
 
