@@ -1,4 +1,5 @@
-import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { Mida } from "@mida-context/sdk";
 import { runAgent } from "./agent.js";
 import { ConfigError, loadConfig } from "./config.js";
@@ -52,7 +53,11 @@ export async function main(
   return exitCode;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+const isMain =
+  process.argv[1] &&
+  realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMain) {
   main()
     .then((code) => process.exit(code))
     .catch((error) => {

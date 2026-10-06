@@ -7,6 +7,7 @@ import { buildTransfer, createWallet } from "../src/wallet.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 const TO = "0x5555555555555555555555555555555555557777";
 const OWNER = "0x1234567890abcdef1234567890abcdef1234abcd";
@@ -50,6 +51,21 @@ describe("parseArgs", () => {
     expect(error).toBeInstanceOf(UsageError);
     expect(error.exitCode).toBe(1);
     expect(error.message).toBe("usage: node --env-file=.env src/cli.js [--dry-run]");
+  });
+});
+
+describe("entry point", () => {
+  it("still runs when cli.js is reached through a symlinked path", () => {
+    const integrationDir = path.resolve(import.meta.dirname, "..");
+    const linkRoot = fs.mkdtempSync(path.join(os.tmpdir(), "mida-link-"));
+    const link = path.join(linkRoot, "mida");
+    fs.symlinkSync(integrationDir, link, "dir");
+    const run = spawnSync(process.execPath, [path.join(link, "src", "cli.js"), "--bogus"], { encoding: "utf8" });
+    fs.rmSync(linkRoot, { recursive: true, force: true });
+    // the entry guard must match on the real path, not the spelled path —
+    // otherwise a symlinked invocation exits 0 having done nothing at all
+    expect(run.status).toBe(1);
+    expect(run.stdout).toContain("usage: node --env-file=.env src/cli.js [--dry-run]");
   });
 });
 
