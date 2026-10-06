@@ -17,7 +17,7 @@ One command prints one line per step:
 
 ```
 trustlayer: delegation #29 from 0x1234…abcd to 0x9876…ef01 — tier Routine ($50), expires 2026-10-10T09:12:00.000Z
-mida: trustlayer-agent approved; brief 0xd9d35dc2… (owner, 2026-10-09T08:50:12Z): transfer 0.01 MON to 0x5555…7777
+mida: trustlayer-agent approved; brief 0xd9d35dc2… (owner, 2026-10-09T08:50:12.345Z): transfer 0.01 MON to 0x5555…7777
 decision: 0.01 MON is within the Routine auto-execute cap (50 MON). Sending.
 sent: 0.01 MON to 0x5555…7777 — tx 0x51f9a2c4d8e7b3f16a0d9c5e2b847a91f06d3c8e5b1a7294f6d0e8c3a5b7d9e1 (block 68,990,001)
 recorded: Mida receipt 0xf7d4bf13… (anchored) in projects.current, author trustlayer-agent
@@ -29,8 +29,11 @@ printed only after the delegation check passes.
 
 ## Setup for the owner
 
-Once, about 20 minutes, all on Monad testnet. Copy `.env.example` to `.env` and fill the values in as you go;
-`npm install` needs Node 22 or later.
+Once, about 20 minutes, all on Monad testnet. Start with `cd ~/Desktop/trustlayer-mida/integrations/mida` —
+the `.env`, the `.mida/` approval record and the journal all live in this folder. Copy `.env.example` to
+`.env` and fill the values in as you go; `npm install` needs Node 22 or later. Node's `--env-file` reads the
+values literally — it does not expand `$HOME`, so paths in `.env` must be absolute (for example
+`MIDA_HOME=/Users/you/.mida-trustlayer`).
 
 Every `mida` command below is written with `MIDA_HOME=$HOME/.mida-trustlayer` in front of it, on purpose: the
 checklist runs over several terminals, and an exported variable from day one would silently be gone in a new
@@ -60,8 +63,9 @@ terminal — writing the brief into the owner's everyday Mida home instead.
 
 ## Run
 
-`node --env-file=.env src/cli.js --dry-run` reads the delegation, prints the Mida status line, reads the brief
-and the existing receipts, and prints the decision — nothing sent, nothing written. Then
+Still in `~/Desktop/trustlayer-mida/integrations/mida`: `node --env-file=.env src/cli.js --dry-run` prints what
+the real run would print, up to the decision — the delegation line, the agent's Mida status for this folder,
+the brief line and the decision it would act on — then `dry run: nothing sent, nothing written.` Then
 `node --env-file=.env src/cli.js` for real. Running the real command again prints `already done …` and exits 0.
 Space live runs at least a minute apart (see Limits).
 
@@ -71,6 +75,9 @@ itself wrote (source `AGENT_INFERRED`, its own author name) marks a brief paid; 
 a second run cannot overlap the first; and the transfer is signed locally and journaled **before** it is
 broadcast — if a run cannot tell whether its send landed, the next run re-sends the identical signed bytes
 (same nonce, same hash), which can never become a second payment, and then writes only the missing receipt.
+The claim holds within the limits below: a brief re-minted to a new record id is a new brief, a revoke that
+lands mid-run cannot stop bytes already signed, and "paid" is judged at Monad's `latest` — proposed, not
+final.
 
 While a run is in flight it holds `.trustlayer-run.lock` in the project folder; a second run prints
 `mida: another run is in progress (pid …)` and exits 1. If a run died and left the file behind, check the
@@ -88,8 +95,12 @@ live run's lock would let two overlapping runs pay two different briefs.
 Both are **forward-only**: a brief the agent already read stays read, and a transfer already sent stays sent.
 Revocation stops the next run, not the last one.
 
-**Tear down when done** so nothing left over can pay: run both revocations above, and remove the demo
-`.env` — after that there is no delegation to check, no Mida grant to read with, and no key in a file.
+**Tear down when done**: run both revocations above and remove the demo `.env`. Nothing new can be signed
+after that — but revoking does not cancel a transaction already signed. A journaled, unmined send in
+`.trustlayer-journal.json` can still land, and that file holds the raw signed bytes — recipient, amount,
+nonce, fee, never the key — so anyone who can read it can broadcast it. Only using its nonce cancels it:
+confirm the journal holds no unresolved entries (each `receipted` or `dead`), or spend the journaled nonce
+with a zero-value self-send, then sweep the wallet.
 
 ## Decision rules
 
@@ -123,10 +134,11 @@ Convention: on testnet MON has no price, so **1 MON stands in for 1 USD** — a 
 ## Limits, in the same breath
 
 Monad testnet only, not audited. Mida keeps the receipt's content as ciphertext off the chain; on Monad a record
-leaves its existence, its author, its time and a hash of its content — so the TrustLayer team can check that a
-receipt exists, who wrote it, and the transfer it points to by hash, but cannot read the receipt itself yet.
-TrustLayer's zero-knowledge verification step is simulated (their README's word) and stays out of scope.
-`checkAgentDelegation` returns the oldest valid delegation for an owner–agent pair.
+leaves its existence, its author, its time and a hash of its encrypted content — so the TrustLayer team can
+check that a receipt record exists, who wrote it and when. The transfer itself is public and can be checked by
+the hash the run prints, but the record's hash covers ciphertext — nobody can tie the two together from the
+chain alone. TrustLayer's zero-knowledge verification step is simulated (their README's word) and stays out of
+scope. `checkAgentDelegation` returns the oldest valid delegation for an owner–agent pair.
 
 Known limits of the once-per-brief guarantee:
 
@@ -139,6 +151,15 @@ Known limits of the once-per-brief guarantee:
 - Mida allows one receipt write per minute per agent on the direct lane — space live runs accordingly. If a
   second run inside the minute sends, its receipt write is refused (exit 5); the transfer happened, the line
   says so, and the next run writes only the missing receipt — never a second payment.
+- A journaled send cannot be re-priced: if the base fee rises above the signed max fee, the signed bytes wait —
+  this agent never signs a fee-bumped replacement for the same brief. The entry resolves when the transaction
+  mines or when its nonce is spent.
+- Re-running `mida add-agent` gives the agent a new author id, so receipts written under the old id stop
+  matching "this agent wrote it" — the old receipts become orphans the paid-check cannot see. The journal
+  still blocks a second signature for those briefs, so they cannot be paid twice; they just look unpaid on
+  Mida's side.
+- "Paid" is judged at Monad's `latest`, a proposed block rather than a finalized one — a receipt or a
+  transaction seen there could, rarely, be dropped.
 
 No scheduler, no ERC-20, no contract calls: the agent does exactly one thing — a plain MON transfer — once per
 brief.
