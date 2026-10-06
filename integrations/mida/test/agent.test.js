@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { keccak256, parseEther } from "viem";
+import { keccak256, parseEther, parseTransaction } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { MidaSdkError } from "@mida-context/sdk";
 import { runAgent } from "../src/agent.js";
@@ -69,22 +69,69 @@ function receiptItem(id, briefRecordId, hash = TX_HASH, overrides = {}) {
   };
 }
 
-function makeChain({ delegation = [true, 29n, 1], details, balanceWei = parseEther("1"), gasPriceWei = 1_000_000_000n, pendingNonce = 7n, latestNonce = 7n, code = "0x", codeError } = {}) {
+// A small model of the chain itself, shared by the wallet and the reads —
+// closer to how Monad really behaves than a bag of independent answers:
+// `pending` equals `latest` (Monad RPC docs); a transaction mines only when its
+// nonce is the account's next nonce and its fee cap covers the base fee; mining
+// advances the nonce and records the payment; and a mined transaction stays
+// findable by hash — the way a real node answers eth_getTransactionReceipt.
+function makeNode({ nonce = 7, balanceWei = parseEther("1"), gasPriceWei = 1_000_000_000n, baseFeeWei = 0n, receiptStatus = "success" } = {}) {
+  const node = {
+    nonce,
+    balanceWei,
+    gasPriceWei,
+    baseFeeWei,
+    receiptStatus,
+    mempool: new Map(), // hash -> parsed tx: reached the node, not yet mined
+    mined: new Map(),   // hash -> receipt
+    payments: [],       // every mined transfer, in order
+    mine() {
+      for (const [hash, tx] of node.mempool) {
+        const cap = tx.maxFeePerGas ?? tx.gasPrice ?? 0n;
+        if (tx.nonce === node.nonce && cap >= node.baseFeeWei) {
+          node.mempool.delete(hash);
+          node.mined.set(hash, { status: node.receiptStatus, blockNumber: 68990001n + BigInt(node.payments.length), transactionHash: hash });
+          node.payments.push({ hash, to: tx.to, value: tx.value });
+          node.nonce += 1;
+          return node.mine();
+        }
+        if (tx.nonce < node.nonce) node.mempool.delete(hash); // stale — can never land
+        // a nonce in the future, or a fee cap under the base fee, just waits
+      }
+    },
+  };
+  return node;
+}
+
+// receiptPlan entries: "ok" (answer from the mined map) | "null" (definitely not
+// mined) | "throw" | Error — for a node that cannot answer the receipt lookup.
+function makeChain({ delegation = [true, 29n, 1], details, node, balanceWei, gasPriceWei, baseFeeWei, nonce, code = "0x", codeError, receiptPlan = ["ok"] } = {}) {
+  const shared = node ?? makeNode({ nonce, balanceWei, gasPriceWei, baseFeeWei });
   const readContractCalls = [];
   const codeCalls = [];
   const struct = details ?? {
     owner: OWNER, agent: AGENT_ADDR, tier: 1, createdAt: 1n, expiresAt: 1791345514n, active: true, revoked: false,
   };
+  const pop = (plan) => (plan.length > 1 ? plan.shift() : plan[0]);
   return {
     readContractCalls,
     codeCalls,
+    node: shared,
     async readContract(input) {
       readContractCalls.push(input);
       return input.functionName === "checkAgentDelegation" ? delegation : struct;
     },
-    async getBalance() { return balanceWei; },
-    async getGasPrice() { return gasPriceWei; },
-    async getTransactionCount({ blockTag }) { return blockTag === "latest" ? latestNonce : pendingNonce; },
+    async getBalance() { return shared.balanceWei; },
+    async getGasPrice() { return shared.gasPriceWei; },
+    async getBlock() { return { baseFeePerGas: shared.baseFeeWei }; },
+    async getTransactionCount() { return shared.nonce; }, // pending == latest on Monad
+    async getTransactionReceipt({ hash }) {
+      const behavior = pop(receiptPlan);
+      if (behavior instanceof Error) throw behavior;
+      if (behavior === "throw") throw Object.assign(new Error("429"), { name: "HttpRequestError" });
+      if (behavior === "null") return null;
+      return shared.mined.get(hash) ?? null;
+    },
     async getCode(input) {
       codeCalls.push(input);
       if (codeError) throw codeError;
@@ -129,18 +176,19 @@ function makeMida({
 
 const TX_TIMEOUT = () => Object.assign(new Error("timed out"), { name: "WaitForTransactionReceiptTimeoutError" });
 
-// a small model of the node: signTransfer signs real bytes locally, sendRawTransaction
-// records the bytes and (unless the plan says otherwise) mines them, so a re-send of
-// identical bytes produces the identical hash — it can never be a second transfer.
-// sendPlan entries: "ok" | "throw" (node never got it) | "throw-after-accept" (the reply
-// was lost but the node mined it). waitPlan entries: "ok" | "timeout" | Error | a receipt
-// object to return as-is.
-function makeWallet({ receipt = { status: "success", blockNumber: 68990001n }, sendPlan = ["ok"], waitPlan = ["ok"] } = {}) {
+// A wallet over the shared node: signTransfer signs real bytes locally;
+// sendRawTransaction hands the bytes to the node, which mines them when their
+// nonce and fee cap allow — so a re-send of identical bytes produces the
+// identical hash and can never be a second transfer. sendPlan entries:
+// "ok" | "throw" (the node never got it) | "throw-after-accept" (the node got
+// it — and may have mined it — but the reply was lost). waitPlan entries:
+// "ok" | "timeout" | Error | a receipt object to return as-is.
+// mineOnSend false leaves broadcasts sitting in the mempool.
+function makeWallet({ node = makeNode(), sendPlan = ["ok"], waitPlan = ["ok"], mineOnSend = true } = {}) {
   const account = privateKeyToAccount(AGENT_KEY);
   const signCalls = [];
   const sendRaws = [];
   const waits = [];
-  const node = new Map(); // tx hash -> mined receipt, shared across runs on this wallet
   const pop = (plan) => (plan.length > 1 ? plan.shift() : plan[0]);
   return {
     signCalls,
@@ -151,13 +199,15 @@ function makeWallet({ receipt = { status: "success", blockNumber: 68990001n }, s
     async signTransfer(input) {
       signCalls.push(input);
       const raw = await account.signTransaction({
-        type: "legacy",
+        type: input.maxFeePerGas !== undefined ? "eip1559" : "legacy",
         chainId: 10143,
         nonce: input.nonce,
         to: input.to,
         value: input.value,
         gas: input.gas,
         gasPrice: input.gasPrice,
+        maxFeePerGas: input.maxFeePerGas,
+        maxPriorityFeePerGas: input.maxPriorityFeePerGas,
       });
       return { raw, hash: keccak256(raw) };
     },
@@ -165,13 +215,14 @@ function makeWallet({ receipt = { status: "success", blockNumber: 68990001n }, s
       sendRaws.push(serializedTransaction);
       const hash = keccak256(serializedTransaction);
       const behavior = pop(sendPlan);
-      if (behavior === "throw-after-accept") {
-        node.set(hash, { ...receipt, transactionHash: hash });
-        throw Object.assign(new Error("the reply was lost"), { name: "SocketError" });
-      }
       if (behavior instanceof Error) throw behavior;
       if (behavior === "throw") throw Object.assign(new Error("connection refused"), { name: "HttpRequestError" });
-      node.set(hash, { ...receipt, transactionHash: hash });
+      // the node got the bytes — whether the sender hears the hash back is another matter
+      if (!node.mined.has(hash)) {
+        node.mempool.set(hash, parseTransaction(serializedTransaction));
+        if (mineOnSend) node.mine();
+      }
+      if (behavior === "throw-after-accept") throw Object.assign(new Error("the reply was lost"), { name: "SocketError" });
       return hash;
     },
     async waitForTransactionReceipt({ hash }) {
@@ -180,7 +231,7 @@ function makeWallet({ receipt = { status: "success", blockNumber: 68990001n }, s
       if (behavior instanceof Error) throw behavior;
       if (behavior === "timeout") throw TX_TIMEOUT();
       if (behavior !== "ok" && behavior && typeof behavior === "object") return behavior;
-      const mined = node.get(hash);
+      const mined = node.mined.get(hash);
       if (!mined) throw TX_TIMEOUT();
       return mined;
     },
@@ -197,28 +248,33 @@ afterEach(() => {
   while (tempDirs.length) fs.rmSync(tempDirs.pop(), { recursive: true, force: true });
 });
 
-async function run({ chain = makeChain(), mida = makeMida(), wallet = makeWallet(), projectDir, now = () => new Date(NOW_ISO), dryRun = false } = {}) {
+// By default the chain reads and the wallet share one node — the ledger is what
+// ties a send to the nonce and receipt reads, which is the whole point.
+async function run({ chain, wallet, mida = makeMida(), node, projectDir, now = () => new Date(NOW_ISO), dryRun = false } = {}) {
+  const shared = node ?? chain?.node ?? wallet?.node ?? makeNode();
+  const chain2 = chain ?? makeChain({ node: shared });
+  const wallet2 = wallet ?? makeWallet({ node: shared });
   const dir = projectDir ?? tmpDir();
   const lines = [];
   const result = await runAgent({
     config: config({ projectDir: dir }),
-    chain,
-    wallet,
+    chain: chain2,
+    wallet: wallet2,
     mida,
     log: (line) => lines.push(line),
     now,
     dryRun,
   });
   for (const line of lines) expect(line).not.toContain(AGENT_KEY);
-  return { result, lines, dir };
+  return { result, lines, dir, node: shared };
 }
 
 describe("runAgent", () => {
   it("happy path: prints the five lines, sends, writes the receipt, exits 0", async () => {
-    const chain = makeChain();
+    const node = makeNode();
     const mida = makeMida();
-    const wallet = makeWallet();
-    const { result, lines, dir } = await run({ chain, mida, wallet });
+    const wallet = makeWallet({ node });
+    const { result, lines, dir } = await run({ node, mida, wallet });
     const txHash = keccak256(wallet.sendRaws[0]);
     expect(lines).toEqual([
       `trustlayer: delegation #29 from 0x1234…abcd to ${SHORT_AGENT} — tier Routine ($50), expires ${EXPIRES_ISO}`,
@@ -229,7 +285,7 @@ describe("runAgent", () => {
     ]);
     expect(result.exitCode).toBe(0);
     // signed with the explicit pending nonce, gas 21000 and the gas price the funds check saw
-    expect(wallet.signCalls).toEqual([{ to: TO, value: 10_000_000_000_000_000n, nonce: 7n, gas: 21000n, gasPrice: 1_000_000_000n }]);
+    expect(wallet.signCalls).toEqual([{ to: TO, value: 10_000_000_000_000_000n, nonce: 7, gas: 21000n, gasPrice: 1_000_000_000n }]);
     expect(wallet.waits).toEqual([txHash]);
     expect(mida.rememberCalls).toHaveLength(1);
     expect(mida.rememberCalls[0].namespace).toBe("projects.current");
@@ -433,16 +489,16 @@ describe("runAgent", () => {
     // and the fee the check used is the fee the signature carries
     const gasPriceWei = 2_000_000_000n;
     const amountWei = parseEther("0.01");
-    const wallet = makeWallet();
-    const chain = makeChain({ balanceWei: amountWei + 21_000n * gasPriceWei, gasPriceWei });
-    const { result } = await run({ chain, wallet });
+    const node = makeNode({ balanceWei: amountWei + 21_000n * gasPriceWei, gasPriceWei });
+    const wallet = makeWallet({ node });
+    const { result } = await run({ node, wallet });
     expect(result.exitCode).toBe(0);
     expect(wallet.signCalls[0].gasPrice).toBe(gasPriceWei);
     expect(wallet.signCalls[0].gas).toBe(21_000n);
 
-    const wallet2 = makeWallet();
-    const short = makeChain({ balanceWei: amountWei + 21_000n * gasPriceWei - 1n, gasPriceWei });
-    const { result: result2, lines: lines2 } = await run({ chain: short, wallet: wallet2 });
+    const node2 = makeNode({ balanceWei: amountWei + 21_000n * gasPriceWei - 1n, gasPriceWei });
+    const wallet2 = makeWallet({ node: node2 });
+    const { result: result2, lines: lines2 } = await run({ node: node2, wallet: wallet2 });
     expect(result2.exitCode).toBe(2);
     expect(lines2.at(-1)).toContain("plus gas");
     expect(wallet2.sendRaws).toHaveLength(0);
@@ -465,13 +521,14 @@ describe("runAgent", () => {
     const wallet = makeWallet();
     const { result, lines } = await run({ mida, wallet });
     expect(result.exitCode).toBe(0);
-    expect(wallet.signCalls).toEqual([{ to: TO, value: 10_000_000_000_000_000n, nonce: 7n, gas: 21000n, gasPrice: 1_000_000_000n }]);
+    expect(wallet.signCalls).toEqual([{ to: TO, value: 10_000_000_000_000_000n, nonce: 7, gas: 21000n, gasPrice: 1_000_000_000n }]);
     expect(lines.some((line) => line.includes("0xnotmine"))).toBe(false);
     expect(mida.rememberCalls).toHaveLength(1);
   });
 
   it("exits 4 with the journaled-hash line when the tx is not confirmed in 60 s", async () => {
-    const wallet = makeWallet({ waitPlan: ["timeout"] });
+    // the node accepted the broadcast but no leader has included it yet
+    const wallet = makeWallet({ waitPlan: ["timeout"], mineOnSend: false });
     const mida = makeMida();
     const { result, lines, dir } = await run({ wallet, mida });
     const txHash = keccak256(wallet.sendRaws[0]);
@@ -486,7 +543,8 @@ describe("runAgent", () => {
   });
 
   it("exits 4 and writes no receipt when the tx reverted", async () => {
-    const wallet = makeWallet({ receipt: { status: "reverted", blockNumber: 68990001n } });
+    const node = makeNode({ receiptStatus: "reverted" });
+    const wallet = makeWallet({ node });
     const mida = makeMida();
     const { result, lines } = await run({ wallet, mida });
     const txHash = keccak256(wallet.sendRaws[0]);
@@ -511,12 +569,13 @@ describe("runAgent", () => {
   it("exit 5 then re-run: no second transfer, the missing receipt is written", async () => {
     const dir = tmpDir();
     const rememberError = new MidaSdkError("rate-limited", "one write per minute on this lane", { lane: "direct" });
-    const wallet = makeWallet();
-    const first = await run({ wallet, mida: makeMida({ rememberError }), projectDir: dir });
+    const node = makeNode();
+    const wallet = makeWallet({ node });
+    const first = await run({ node, wallet, mida: makeMida({ rememberError }), projectDir: dir });
     expect(first.result.exitCode).toBe(5);
 
     const secondMida = makeMida();
-    const second = await run({ wallet, mida: secondMida, projectDir: dir });
+    const second = await run({ node, wallet, mida: secondMida, projectDir: dir });
     expect(second.result.exitCode).toBe(0);
     // the re-run broadcast exactly the journaled bytes — the node sees the same transaction
     expect(wallet.sendRaws).toHaveLength(2);
@@ -528,15 +587,18 @@ describe("runAgent", () => {
 
   it("wait timeout then re-run: same bytes re-sent, one transfer total", async () => {
     const dir = tmpDir();
-    const wallet = makeWallet({ waitPlan: ["timeout", "ok"] });
+    const node = makeNode();
+    // the node took the broadcast but no leader mined it before the wait timed out
+    const wallet = makeWallet({ node, waitPlan: ["timeout", "ok"], mineOnSend: false });
     const mida = makeMida();
-    const first = await run({ wallet, mida, projectDir: dir });
+    const first = await run({ node, wallet, mida, projectDir: dir });
     const txHash = keccak256(wallet.sendRaws[0]);
     expect(first.result.exitCode).toBe(4);
     expect(first.lines.at(-1)).toContain(txHash);
     expect(first.lines.at(-1)).not.toContain("before running again");
 
-    const second = await run({ wallet, mida, projectDir: dir });
+    node.mine(); // the transaction lands between the two runs
+    const second = await run({ node, wallet, mida, projectDir: dir });
     expect(second.result.exitCode).toBe(0);
     expect(wallet.sendRaws).toHaveLength(2);
     expect(wallet.sendRaws[1]).toBe(wallet.sendRaws[0]);
@@ -544,18 +606,19 @@ describe("runAgent", () => {
     expect(second.lines.some((line) => line.startsWith("recovered:"))).toBe(true);
   });
 
-  it("send error after the node may have accepted: no 'Nothing was sent', re-run re-sends the same bytes", async () => {
+  it("send error: no 'Nothing was sent', re-run re-sends the same bytes", async () => {
     const dir = tmpDir();
-    const wallet = makeWallet({ sendPlan: ["throw-after-accept", "ok"], waitPlan: ["timeout", "ok"] });
+    const node = makeNode();
+    const wallet = makeWallet({ node, sendPlan: ["throw", "ok"], waitPlan: ["timeout", "ok"] });
     const mida = makeMida();
-    const first = await run({ wallet, mida, projectDir: dir });
+    const first = await run({ node, wallet, mida, projectDir: dir });
     const txHash = keccak256(wallet.sendRaws[0]);
     expect(first.result.exitCode).toBe(4);
     for (const line of first.lines) expect(line).not.toContain("Nothing was sent");
     expect(first.lines.at(-1)).toContain(txHash);
     expect(first.lines.at(-1)).toContain("cannot pay twice");
 
-    const second = await run({ wallet, mida, projectDir: dir });
+    const second = await run({ node, wallet, mida, projectDir: dir });
     expect(second.result.exitCode).toBe(0);
     expect(wallet.sendRaws).toHaveLength(2);
     expect(wallet.sendRaws[1]).toBe(wallet.sendRaws[0]);
@@ -566,10 +629,11 @@ describe("runAgent", () => {
     const dir = tmpDir();
     const linesA = [];
     const linesB = [];
-    const wallet = makeWallet();
+    const node = makeNode();
+    const wallet = makeWallet({ node });
     const [a, b] = await Promise.all([
-      runAgent({ config: config({ projectDir: dir }), chain: makeChain(), wallet, mida: makeMida(), log: (l) => linesA.push(l) }),
-      runAgent({ config: config({ projectDir: dir }), chain: makeChain(), wallet, mida: makeMida(), log: (l) => linesB.push(l) }),
+      runAgent({ config: config({ projectDir: dir }), chain: makeChain({ node }), wallet, mida: makeMida(), log: (l) => linesA.push(l) }),
+      runAgent({ config: config({ projectDir: dir }), chain: makeChain({ node }), wallet, mida: makeMida(), log: (l) => linesB.push(l) }),
     ]);
     expect([a.exitCode, b.exitCode].sort()).toEqual([0, 1]);
     const loser = a.exitCode === 1 ? linesA : linesB;
@@ -600,11 +664,15 @@ describe("runAgent", () => {
 
   it("exits 4 when the journaled nonce was spent by a different transaction", async () => {
     const dir = tmpDir();
-    const wallet = makeWallet({ sendPlan: ["throw", "throw"], waitPlan: ["timeout", "timeout"] });
-    const first = await run({ wallet, mida: makeMida(), chain: makeChain({ pendingNonce: 7n, latestNonce: 7n }), projectDir: dir });
+    const node = makeNode();
+    // every broadcast fails, so the journaled transaction never reaches the node
+    const wallet = makeWallet({ node, sendPlan: ["throw"], waitPlan: ["timeout"] });
+    const first = await run({ node, wallet, mida: makeMida(), projectDir: dir });
     expect(first.result.exitCode).toBe(4);
-    // meanwhile the wallet spent nonce 7 elsewhere — the journaled tx can never land
-    const second = await run({ wallet, mida: makeMida(), chain: makeChain({ pendingNonce: 8n, latestNonce: 8n }), projectDir: dir });
+    // meanwhile the wallet spent nonce 7 in a transaction this run never saw —
+    // the journaled tx can never land
+    node.nonce = 8;
+    const second = await run({ node, wallet, mida: makeMida(), projectDir: dir });
     expect(second.result.exitCode).toBe(4);
     const txHash = keccak256(wallet.sendRaws[0]);
     expect(second.lines.at(-1)).toContain("nonce");
