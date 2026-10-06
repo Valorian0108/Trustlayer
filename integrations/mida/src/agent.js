@@ -63,6 +63,23 @@ async function sendAndAwait({ config, chain, wallet, mida, log, now, delegation,
     waitError = error;
   }
 
+  // The wait can die on an RPC error after the transaction already mined, and
+  // then the spent nonce belongs to OUR transaction — never another one. So
+  // before the nonce is read at all, ask the chain for the journaled hash; and
+  // remember if the node could not answer, because then the nonce must not be
+  // read as "someone else spent it" — ours may be what spent it.
+  let lookupFailed = false;
+  if (!receipt) {
+    try {
+      receipt = await chain.getTransactionReceipt({ hash: signed.hash });
+    } catch (error) {
+      // viem names a genuinely absent receipt TransactionReceiptNotFoundError;
+      // any other failure means the node could not answer at all.
+      if (error && error.name === "TransactionReceiptNotFoundError") receipt = null;
+      else lookupFailed = true;
+    }
+  }
+
   if (!receipt) {
     // If the journaled nonce is already spent on chain by a transaction that
     // is not ours, this transaction can never land — say so and keep the journal.
@@ -70,7 +87,9 @@ async function sendAndAwait({ config, chain, wallet, mida, log, now, delegation,
       const latest = await chain.getTransactionCount({ address: config.agentAddress, blockTag: "latest" });
       if (BigInt(latest) > BigInt(signed.nonce)) {
         log(
-          `chain: the nonce the journaled transaction used was already spent by a different transaction — tx ${signed.hash} can never land. No Mida receipt was written; the journal keeps the record.`
+          lookupFailed
+            ? `chain: the nonce the journaled transaction used is spent, but the node cannot tell whether tx ${signed.hash} is what spent it — its receipt lookup failed. Whether it landed is unknown; do not delete the journal — running again re-checks.`
+            : `chain: the nonce the journaled transaction used was already spent by a different transaction — tx ${signed.hash} can never land. No Mida receipt was written; the journal keeps the record.`
         );
         return { exitCode: 4, outcome: "nonce-spent", txHash: signed.hash };
       }

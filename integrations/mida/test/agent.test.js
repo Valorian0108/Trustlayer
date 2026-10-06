@@ -606,6 +606,38 @@ describe("runAgent", () => {
     expect(second.lines.some((line) => line.startsWith("recovered:"))).toBe(true);
   });
 
+  it("writes the receipt when the wait fails but our transaction mined anyway", async () => {
+    // the node mined the broadcast; the wait's reply is what got lost
+    const node = makeNode();
+    const wallet = makeWallet({ node, waitPlan: ["timeout"] });
+    const mida = makeMida();
+    const { result, lines } = await run({ node, wallet, mida });
+    expect(result.exitCode).toBe(0);
+    expect(node.payments).toHaveLength(1);
+    expect(mida.rememberCalls).toHaveLength(1);
+    expect(lines.at(-1)).toContain("recorded:");
+    expect(lines.some((line) => line.includes("different transaction"))).toBe(false);
+  });
+
+  it("says it cannot tell, not 'a different transaction', when the receipt lookup fails too", async () => {
+    const dir = tmpDir();
+    const node = makeNode();
+    // the node never saw the broadcast and cannot answer the receipt lookup either
+    const chain = makeChain({ node, receiptPlan: ["throw"] });
+    const wallet = makeWallet({ node, sendPlan: ["throw"], waitPlan: ["timeout"] });
+    const first = await run({ chain, wallet, projectDir: dir });
+    expect(first.result.exitCode).toBe(4);
+    // the wallet's nonce moved — maybe our transaction mined, maybe another one
+    // spent it; the run cannot tell and must not guess
+    node.nonce = 8;
+    const second = await run({ chain, wallet, projectDir: dir });
+    const txHash = keccak256(wallet.sendRaws[0]);
+    expect(second.result.exitCode).toBe(4);
+    expect(second.lines.at(-1)).toContain(txHash);
+    expect(second.lines.at(-1)).toContain("cannot tell");
+    expect(second.lines.at(-1)).not.toContain("different transaction");
+  });
+
   it("send error: no 'Nothing was sent', re-run re-sends the same bytes", async () => {
     const dir = tmpDir();
     const node = makeNode();
