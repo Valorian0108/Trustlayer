@@ -2,6 +2,14 @@
 
 <img src="assets/logo.jpg" alt="Trust Layer Logo" width="300" height="150">
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Monad-testnet%2010143-836EF9?style=flat-square&labelColor=14130F" alt="Monad testnet, chain 10143">
+  <img src="https://img.shields.io/badge/status-hackathon%20submission-836EF9?style=flat-square&labelColor=14130F" alt="Hackathon submission">
+  <img src="https://img.shields.io/badge/smart%20contracts-deployed-2f9e44?style=flat-square&labelColor=14130F" alt="Smart contracts deployed">
+  <img src="https://img.shields.io/badge/Privy-integrated-22c55e?style=flat-square&labelColor=14130F" alt="Privy integrated">
+  <img src="https://img.shields.io/badge/license-MIT-7e8c86?style=flat-square&labelColor=14130F" alt="MIT license">
+</p>
+
 ## A Proportional Authorization Infrastructure for AI Agents
 
 > **Small action: proceed. High-stakes action: prove authorization first.**
