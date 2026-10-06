@@ -173,6 +173,22 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
       `trustlayer: delegation #${delegation.id} from ${shortAddr(delegation.owner)} to ${shortAddr(delegation.agent)} — tier ${delegation.tierLabel}, expires ${delegation.expiresAt ?? "never"}`
     );
 
+    // The delegation check gates every Mida call: a revoked delegation exits
+    // above without ever touching the owner's Mida service.
+    if (dryRun) {
+      let status;
+      try {
+        status = await mida.status();
+      } catch (error) {
+        if (isMidaSdkError(error)) {
+          log(midaRefusedLine(error));
+          return { exitCode: 3, outcome: "refused" };
+        }
+        throw error;
+      }
+      if (status) log(status.text);
+    }
+
     let facts;
     try {
       facts = await readAll(mida, BRIEF_NAMESPACE, BRIEF_PAGE_BYTES);

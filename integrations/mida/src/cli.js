@@ -20,17 +20,24 @@ export function parseArgs(argv) {
   return flags;
 }
 
-async function main() {
+export async function main(
+  argv = process.argv.slice(2),
+  env = process.env,
+  deps = {}
+) {
+  const makeChain = deps.createChain ?? createChain;
+  const makeWallet = deps.createWallet ?? createWallet;
+  const makeMida = deps.createMida ?? ((cfg) => new Mida({ agent: cfg.midaAgent, home: cfg.midaHome, project: cfg.projectDir }));
   let flags;
   try {
-    flags = parseArgs(process.argv.slice(2));
+    flags = parseArgs(argv);
   } catch (error) {
     console.log(error.message);
     return error.exitCode ?? 1;
   }
   let config;
   try {
-    config = loadConfig(process.env);
+    config = loadConfig(env);
   } catch (error) {
     if (error instanceof ConfigError) {
       console.log(error.message);
@@ -38,13 +45,9 @@ async function main() {
     }
     throw error;
   }
-  const chain = createChain(config);
-  const wallet = createWallet(config);
-  const mida = new Mida({ agent: config.midaAgent, home: config.midaHome, project: config.projectDir });
-  if (flags.dryRun) {
-    const status = await mida.status();
-    console.log(status.text);
-  }
+  const chain = makeChain(config);
+  const wallet = makeWallet(config);
+  const mida = makeMida(config);
   const { exitCode } = await runAgent({ config, chain, wallet, mida, log: console.log, dryRun: flags.dryRun });
   return exitCode;
 }

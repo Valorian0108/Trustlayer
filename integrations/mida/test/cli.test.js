@@ -1,11 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseEther } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { monadTestnet } from "viem/chains";
-import { parseArgs, UsageError } from "../src/cli.js";
+import { main, parseArgs, UsageError } from "../src/cli.js";
 import { buildTransfer, createWallet } from "../src/wallet.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const TO = "0x5555555555555555555555555555555555557777";
+const OWNER = "0x1234567890abcdef1234567890abcdef1234abcd";
 
 describe("buildTransfer", () => {
   it("returns a bare value transfer on Monad testnet", () => {
@@ -46,5 +50,73 @@ describe("parseArgs", () => {
     expect(error).toBeInstanceOf(UsageError);
     expect(error.exitCode).toBe(1);
     expect(error.message).toBe("usage: node --env-file=.env src/cli.js [--dry-run]");
+  });
+});
+
+describe("main", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function envFor(key) {
+    const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "mida-cli-"));
+    return {
+      AGENT_PRIVATE_KEY: key,
+      TRUSTLAYER_OWNER: OWNER,
+      MIDA_HOME: "/tmp/mida-cli-home",
+      MIDA_PROJECT: projectDir,
+    };
+  }
+
+  const DELEGATION_STRUCT = {
+    owner: OWNER,
+    agent: "0x" + "11".repeat(20),
+    tier: 1,
+    createdAt: 1n,
+    expiresAt: 1791345514n,
+    active: true,
+    revoked: false,
+  };
+
+  function deps({ delegation = [false, 0n, 0], mida } = {}) {
+    const fakeMida = mida ?? {
+      status: vi.fn(async () => ({ up: true, text: "trustlayer-agent: approved for this folder" })),
+      context: vi.fn(async () => ({ items: [], cursor: null })),
+      remember: vi.fn(),
+    };
+    return {
+      mida: fakeMida,
+      deps: {
+        createChain: () => ({
+          readContract: async ({ functionName }) => (functionName === "checkAgentDelegation" ? delegation : DELEGATION_STRUCT),
+          getBalance: async () => parseEther("1"),
+          getGasPrice: async () => 1_000_000_000n,
+          getTransactionCount: async () => 7n,
+          getCode: async () => "0x",
+        }),
+        createWallet: () => ({}),
+        createMida: () => fakeMida,
+      },
+    };
+  }
+
+  it("exits 2 on a revoked delegation without a single Mida call", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const { mida, deps: injected } = deps({ delegation: [false, 0n, 0] });
+    const code = await main(["--dry-run"], envFor(generatePrivateKey()), injected);
+    expect(code).toBe(2);
+    expect(mida.status).not.toHaveBeenCalled();
+    expect(mida.context).not.toHaveBeenCalled();
+    expect(mida.remember).not.toHaveBeenCalled();
+  });
+
+  it("prints the Mida status line on a dry run once the delegation checks out", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const { mida, deps: injected } = deps({ delegation: [true, 29n, 1] });
+    const code = await main(["--dry-run"], envFor(generatePrivateKey()), injected);
+    expect(mida.status).toHaveBeenCalledTimes(1);
+    // the delegation read still happened first — Mida is only touched after it passes
+    expect(mida.context).toHaveBeenCalled();
+    expect(code).toBe(2); // the fake serves no brief, so the run refuses after status
   });
 });

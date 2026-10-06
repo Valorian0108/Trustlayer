@@ -96,11 +96,17 @@ function makeMida({
 } = {}) {
   const contextCalls = [];
   const rememberCalls = [];
+  const statusCalls = [];
   let fi = 0;
   let ri = 0;
   return {
     contextCalls,
     rememberCalls,
+    statusCalls,
+    async status() {
+      statusCalls.push(1);
+      return { up: true, text: "trustlayer-agent: approved for this folder" };
+    },
     async context(input) {
       contextCalls.push(input);
       if (contextError) throw contextError;
