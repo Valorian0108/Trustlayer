@@ -1,6 +1,6 @@
 # Trust Layer
 
-![Trust Layer Logo](assets/logo.jpg)
+<img src="assets/logo.jpg" alt="Trust Layer Logo" width="300" height="150">
 
 ## A Proportional Authorization Infrastructure for AI Agents
 
