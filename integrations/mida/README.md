@@ -153,6 +153,11 @@ the hash the run prints, but the record's hash covers ciphertext — nobody can 
 chain alone. TrustLayer's zero-knowledge verification step is simulated (their README's word) and stays out of
 scope. `checkAgentDelegation` returns the oldest valid delegation for an owner–agent pair.
 
+The TrustLayer check is only as strong as the owner address in `.env`. Anyone with a key can create a
+delegation, including the agent to itself: the live run on Oct 6 did so by mistake (delegation #29, revoked).
+Had `TRUSTLAYER_OWNER` named the agent's own address, the agent would have passed the check on its own
+delegation. Set it to the owner's address, never the agent's, and treat it as part of what the owner approves.
+
 Known limits of the once-per-brief guarantee:
 
 - A brief re-minted by `mida remember --replaces` or `mida migrate` gets a **new record id** — the paid-once key
