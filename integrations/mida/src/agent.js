@@ -130,7 +130,7 @@ function deadReasonText(dead) {
 // Broadcast the signed bytes, then wait for the journaled hash. A send error
 // does NOT mean nothing reached the node (viem retries the broadcast after
 // its own timeout and on 5xx/429), so the wait runs either way.
-async function sendAndAwait({ config, chain, wallet, mida, log, now, journal, delegation, brief, signed, recovery }) {
+async function sendAndAwait({ config, chain, wallet, mida, log, now, journal, delegation, brief, signed, recovery, progress }) {
   if (recovery) {
     log(`journal: a signed transaction for this brief is on record (tx ${signed.hash}); re-sending the same bytes — it cannot pay twice.`);
   }
@@ -140,6 +140,9 @@ async function sendAndAwait({ config, chain, wallet, mida, log, now, journal, de
   } catch (error) {
     sendError = error;
   }
+  // the bytes may have reached the node even when the answer did not come
+  // back, so the broadcast counts as attempted either way
+  progress.state = "broadcast";
   let receipt = null;
   let waitError = null;
   try {
@@ -228,6 +231,8 @@ async function sendAndAwait({ config, chain, wallet, mida, log, now, journal, de
     return { exitCode: 4, outcome: "unconfirmed", txHash: signed.hash };
   }
 
+  // a receipt exists — whatever happens next, the transaction has landed
+  progress.state = "mined";
   if (receipt.transactionHash && receipt.transactionHash.toLowerCase() !== signed.hash.toLowerCase()) {
     markJournalDead(config.projectDir, journal, brief.id, { reason: "replaced", detail: receipt.transactionHash, at: now().toISOString() });
     log(
@@ -278,7 +283,7 @@ async function sendAndAwait({ config, chain, wallet, mida, log, now, journal, de
 // that brief's missing receipt; nonce provably spent by another transaction →
 // mark the entry dead (kept, with the reason); anything else → re-broadcast the
 // same bytes once and report "unresolved" so the caller signs nothing new.
-async function resolveJournalEntry({ config, chain, wallet, mida, log, now, journal, delegation, entryId, entry }) {
+async function resolveJournalEntry({ config, chain, wallet, mida, log, now, journal, delegation, entryId, entry, progress }) {
   const check = await verifyJournalEntry({ entry, agentAddress: config.agentAddress });
   if (!check.ok) {
     log(
@@ -290,6 +295,7 @@ async function resolveJournalEntry({ config, chain, wallet, mida, log, now, jour
   // A receipt for the journaled hash settles the entry: success writes the
   // missing receipt; anything else can never pay and the entry is kept, dead.
   const settle = async (receipt) => {
+    progress.state = "mined"; // a receipt exists — the transaction has landed
     if (receipt.status === "success") {
       // the transaction landed; the missing piece is this brief's receipt
       log(
@@ -369,6 +375,7 @@ async function resolveJournalEntry({ config, chain, wallet, mida, log, now, jour
       } catch {
         // the node may already hold the bytes — the outcome is the same
       }
+      progress.state = "broadcast";
       try {
         const settled = await wallet.waitForTransactionReceipt({ hash: entry.hash, timeout: RESOLVE_WAIT_MS });
         if (settled) return settle(settled);
@@ -393,10 +400,12 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
     }
     throw error;
   }
-  // the hash of anything this run signed or re-broadcast — attached to an
-  // unexpected error so the cli line can name it instead of claiming nothing
-  // happened
-  let signedTxHash = null;
+  // the hash of anything this run signed or re-broadcast, and how far it got —
+  // attached to an unexpected error so the cli line can say what is actually
+  // known instead of guessing (signed: nothing was broadcast; journaled: an
+  // earlier run signed it; broadcast: sent, landing unknown; mined: landed,
+  // only the receipt may be missing)
+  const progress = { hash: null, state: null };
   try {
     let delegation;
     try {
@@ -567,8 +576,9 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
           );
           return { exitCode: 4, outcome: "journal-invalid", txHash: entry.hash };
         }
-        signedTxHash = entry.hash;
-        return await sendAndAwait({ config, chain, wallet, mida, log, now, journal, delegation, brief, signed: entry, recovery: true });
+        progress.hash = entry.hash;
+        progress.state = "journaled"; // an earlier run signed it
+        return await sendAndAwait({ config, chain, wallet, mida, log, now, journal, delegation, brief, signed: entry, recovery: true, progress });
       }
       const ownReceipt = ownReceiptFor(receipts, entryId, config.midaAgent);
       if (ownReceipt) {
@@ -582,8 +592,9 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
         blockedDryRun = true;
         continue;
       }
-      signedTxHash = entry.hash;
-      const state = await resolveJournalEntry({ config, chain, wallet, mida, log, now, journal, delegation, entryId, entry });
+      progress.hash = entry.hash;
+      progress.state = "journaled"; // an earlier run signed it
+      const state = await resolveJournalEntry({ config, chain, wallet, mida, log, now, journal, delegation, entryId, entry, progress });
       if (state === "invalid") return { exitCode: 4, outcome: "journal-invalid", txHash: entry.hash };
       if (state === "unresolved" || state === "receipt-write-failed") {
         log(
@@ -638,7 +649,8 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
       log(`chain: could not prepare the transaction over ${rpcHost(config.rpcUrl)} (${errorClass(error)}). Nothing was sent.`);
       return { exitCode: 4, outcome: "chain-error" };
     }
-    signedTxHash = prepared.hash;
+    progress.hash = prepared.hash;
+    progress.state = "signed"; // signed but not broadcast — a failure before send means nothing was sent
     writeJournalEntry(config.projectDir, journal, brief.id, {
       hash: prepared.hash,
       raw: prepared.raw,
@@ -648,11 +660,12 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
       memo: brief.memo,
       delegationId: delegation.id,
     });
-    return await sendAndAwait({ config, chain, wallet, mida, log, now, journal, delegation, brief, signed: { ...prepared, nonce: Number(nonce) }, recovery: false });
+    return await sendAndAwait({ config, chain, wallet, mida, log, now, journal, delegation, brief, signed: { ...prepared, nonce: Number(nonce) }, recovery: false, progress });
   } catch (error) {
-    if (signedTxHash && error && typeof error === "object") {
+    if (progress.hash && error && typeof error === "object") {
       try {
-        error.txHash = signedTxHash;
+        error.txHash = progress.hash;
+        error.txState = progress.state;
       } catch {
         // a frozen error object degrades the line to the name only
       }

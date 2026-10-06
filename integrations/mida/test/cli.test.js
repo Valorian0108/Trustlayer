@@ -138,33 +138,40 @@ describe("main", () => {
     expect(code).toBe(2); // the fake serves no brief, so the run refuses after status
   });
 
-  it("an unexpected error after signing names the hash and the unknown outcome, never 'Nothing more was done'", async () => {
+  function signableWallet() {
+    return {
+      account: null,
+      raw: null,
+      async signTransfer({ to, value, nonce, gas, maxFeePerGas, maxPriorityFeePerGas }) {
+        this.raw = await this.account.signTransaction({ type: "eip1559", chainId: monadTestnet.id, nonce, to, value, gas, maxFeePerGas, maxPriorityFeePerGas });
+        return { raw: this.raw, hash: keccak256(this.raw) };
+      },
+      async sendRawTransaction() { return keccak256(this.raw); },
+      async waitForTransactionReceipt() { return { status: "success", blockNumber: 1n, transactionHash: keccak256(this.raw) }; },
+    };
+  }
+
+  const BRIEF_FACT = {
+    id: "0xd9d35dc2c50055f8",
+    namespace: "preferences.communication",
+    kind: "PREFERENCE",
+    content: { text: `{"trustlayer":1,"action":"transfer","to":"${TO}","amountMon":"0.01","memo":"x"}`, assertedAt: "2026-10-09T08:50:12Z" },
+    author: { name: null, id: "0x" + "0".repeat(64) },
+    source: "USER_ASSERTED",
+    writtenAt: "2026-10-09T08:50:12Z",
+    state: "anchored",
+  };
+
+  it("an unexpected error after a confirmed send says it landed and only the receipt is missing", async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     const key = generatePrivateKey();
-    const account = privateKeyToAccount(key);
-    let raw;
-    const wallet = {
-      async signTransfer({ to, value, nonce, gas, maxFeePerGas, maxPriorityFeePerGas }) {
-        raw = await account.signTransaction({ type: "eip1559", chainId: monadTestnet.id, nonce, to, value, gas, maxFeePerGas, maxPriorityFeePerGas });
-        return { raw, hash: keccak256(raw) };
-      },
-      async sendRawTransaction() { return keccak256(raw); },
-      async waitForTransactionReceipt() { return { status: "success", blockNumber: 1n, transactionHash: keccak256(raw) }; },
-    };
-    const brief = {
-      id: "0xd9d35dc2c50055f8",
-      namespace: "preferences.communication",
-      kind: "PREFERENCE",
-      content: { text: `{"trustlayer":1,"action":"transfer","to":"${TO}","amountMon":"0.01","memo":"x"}`, assertedAt: "2026-10-09T08:50:12Z" },
-      author: { name: null, id: "0x" + "0".repeat(64) },
-      source: "USER_ASSERTED",
-      writtenAt: "2026-10-09T08:50:12Z",
-      state: "anchored",
-    };
+    const wallet = signableWallet();
+    wallet.account = privateKeyToAccount(key);
     const fakeMida = {
       status: vi.fn(async () => ({ up: true, text: "approved" })),
-      context: vi.fn(async ({ namespace }) => ({ items: namespace === "preferences.communication" ? [brief] : [], cursor: null })),
-      // a non-SDK error — the kind only the unexpected line can cover
+      context: vi.fn(async ({ namespace }) => ({ items: namespace === "preferences.communication" ? [BRIEF_FACT] : [], cursor: null })),
+      // a non-SDK error — the kind only the unexpected line can cover; it fires
+      // after the sent: line, so the transfer is known to have landed
       remember: vi.fn(async () => { throw new TypeError("the SDK shape changed under us"); }),
     };
     const { deps: injected } = deps({ delegation: [true, 29n, 1], mida: fakeMida });
@@ -173,8 +180,42 @@ describe("main", () => {
     expect(code).toBe(1);
     const line = console.log.mock.calls.at(-1)[0];
     expect(line).toContain("unexpected: TypeError");
-    expect(line).toContain(keccak256(raw));
-    expect(line).toContain("unknown");
+    expect(line).toContain(keccak256(wallet.raw));
+    expect(line).toContain("confirmed on-chain");
+    expect(line).toContain("receipt");
+    expect(line).not.toContain("unknown");
     expect(line).not.toContain("Nothing more was done");
+  });
+
+  it("an unexpected error before any broadcast says nothing was sent, never 'unknown'", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const key = generatePrivateKey();
+    const wallet = signableWallet();
+    wallet.account = privateKeyToAccount(key);
+    wallet.sendRawTransaction = vi.fn(); // must never be reached
+    wallet.waitForTransactionReceipt = vi.fn(); // must never be reached
+    const fakeMida = {
+      status: vi.fn(async () => ({ up: true, text: "approved" })),
+      context: vi.fn(async ({ namespace }) => ({ items: namespace === "preferences.communication" ? [BRIEF_FACT] : [], cursor: null })),
+      remember: vi.fn(),
+    };
+    // the journal write fails after signing but before anything is broadcast —
+    // the signed bytes never left the process, so "landed" is not a question
+    const realOpen = fs.openSync;
+    vi.spyOn(fs, "openSync").mockImplementation((file, flags, mode) => {
+      if (String(file).includes(".trustlayer-journal.json.")) throw new Error("ENOSPC: no space left on device");
+      return realOpen(file, flags, mode);
+    });
+    const { deps: injected } = deps({ delegation: [true, 29n, 1], mida: fakeMida });
+    injected.createWallet = () => wallet;
+    const code = await main([], envFor(key), injected);
+    expect(code).toBe(1);
+    const line = console.log.mock.calls.at(-1)[0];
+    expect(line).toContain("unexpected:");
+    expect(line).toContain(keccak256(wallet.raw));
+    expect(line).toContain("Nothing was sent");
+    expect(line).not.toContain("unknown");
+    expect(wallet.sendRawTransaction).not.toHaveBeenCalled();
+    expect(wallet.waitForTransactionReceipt).not.toHaveBeenCalled();
   });
 });

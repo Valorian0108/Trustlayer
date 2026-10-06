@@ -53,16 +53,31 @@ export async function main(
   try {
     ({ exitCode } = await runAgent({ config, chain, wallet, mida, log: console.log, dryRun: flags.dryRun }));
   } catch (error) {
-    // a run that signed or broadcast carries its hash on the error — the line
-    // must name it and call the outcome unknown, never claim nothing happened
+    // a run that signed or broadcast carries the hash and how far it got on the
+    // error — the line must say what is actually known: a confirmed tx is only
+    // missing its receipt, and a hash that never reached the wire sent nothing
     console.log(
       error?.txHash
-        ? `unexpected: ${error instanceof Error ? error.name : "Error"} — this run signed tx ${error.txHash}; whether it landed is unknown.`
+        ? `unexpected: ${error instanceof Error ? error.name : "Error"} — ${txLine(error)}`
         : `unexpected: ${error instanceof Error ? error.name : "Error"}. Nothing more was done.`
     );
     return 1;
   }
   return exitCode;
+}
+
+// What the unexpected line may honestly say about a journaled or signed hash.
+function txLine(error) {
+  switch (error?.txState) {
+    case "mined":
+      return `tx ${error.txHash} is confirmed on-chain; only its Mida receipt may be missing — running again writes it.`;
+    case "signed":
+      return `this run signed tx ${error.txHash} but it was never broadcast. Nothing was sent.`;
+    case "journaled":
+      return `journaled tx ${error.txHash} was signed by an earlier run and may still be in flight; whether it landed is unknown.`;
+    default:
+      return `tx ${error.txHash} may have been broadcast; whether it landed is unknown — running again re-checks.`;
+  }
 }
 
 const isMain =
