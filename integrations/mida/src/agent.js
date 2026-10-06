@@ -1,5 +1,5 @@
 import { isMidaSdkError } from "@mida-context/sdk";
-import { formatEther, formatGwei, parseTransaction, zeroAddress } from "viem";
+import { formatEther, formatGwei, keccak256, parseTransaction, recoverTransactionAddress, zeroAddress } from "viem";
 import { monadTestnet } from "viem/chains";
 import { BriefError, parseBrief, pickBrief, shortId } from "./brief.js";
 import { alreadyDoneLine, decide, noDelegationLine, ownReceiptFor } from "./decide.js";
@@ -72,6 +72,46 @@ function journaledFeeCap(signed) {
   } catch {
     return null;
   }
+}
+
+// The journal holds the only record of what was signed, so before re-sending
+// any journaled bytes prove they are what the entry claims: they decode, hash
+// to the recorded hash, recover this agent's signature, and carry the recorded
+// nonce plus the brief's destination and amount. A hand-edit that fails any of
+// those is refused — never re-sent, never receipted.
+async function verifyJournalEntry({ entry, brief, agentAddress }) {
+  let decoded;
+  try {
+    decoded = parseTransaction(entry.raw);
+  } catch {
+    return { ok: false, why: "the stored bytes do not decode as a signed transaction" };
+  }
+  if (!entry.hash || keccak256(entry.raw).toLowerCase() !== entry.hash.toLowerCase()) {
+    return { ok: false, why: "the stored bytes do not hash to the recorded transaction hash" };
+  }
+  let from;
+  try {
+    from = await recoverTransactionAddress({ serializedTransaction: entry.raw });
+  } catch {
+    return { ok: false, why: "the signature does not recover a sender" };
+  }
+  if (from.toLowerCase() !== agentAddress.toLowerCase()) {
+    return { ok: false, why: "it was signed by a different address" };
+  }
+  if (decoded.nonce == null || BigInt(decoded.nonce) !== BigInt(entry.nonce)) {
+    return { ok: false, why: `its nonce is ${decoded.nonce}, not the recorded ${entry.nonce}` };
+  }
+  // the brief is the source of truth when this is the run's own brief; the
+  // entry's stored fields cover briefs whose record is no longer on Mida
+  const expectedTo = brief?.to ?? entry.to;
+  const expectedValue = brief ? brief.amountWei : entry.value != null ? BigInt(entry.value) : undefined;
+  if (expectedTo && decoded.to?.toLowerCase() !== expectedTo.toLowerCase()) {
+    return { ok: false, why: `it pays ${decoded.to}, not ${expectedTo}` };
+  }
+  if (expectedValue != null && (decoded.value ?? 0n) !== expectedValue) {
+    return { ok: false, why: `it carries ${formatEther(decoded.value ?? 0n)} MON, not ${formatEther(expectedValue)} MON` };
+  }
+  return { ok: true, decoded };
 }
 
 function deadReasonText(dead) {
@@ -216,15 +256,14 @@ async function sendAndAwait({ config, chain, wallet, mida, log, now, journal, de
 // mark the entry dead (kept, with the reason); anything else → re-broadcast the
 // same bytes once and report "unresolved" so the caller signs nothing new.
 async function resolveJournalEntry({ config, chain, wallet, mida, log, now, journal, delegation, entryId, entry }) {
-  let decoded;
-  try {
-    decoded = parseTransaction(entry.raw);
-  } catch {
+  const check = await verifyJournalEntry({ entry, agentAddress: config.agentAddress });
+  if (!check.ok) {
     log(
-      `journal: the stored bytes for brief ${shortId(entryId)} do not decode as a transaction. Refusing to re-send them and signing nothing new — check ${JOURNAL_FILE} by hand.`
+      `journal: the stored transaction for brief ${shortId(entryId)} is not what was signed (${check.why}). Refusing to re-send it and signing nothing new — check ${JOURNAL_FILE} by hand; never delete it while a payment may be pending.`
     );
     return "invalid";
   }
+  const decoded = check.decoded;
   for (let pass = 0; pass < 2; pass += 1) {
     let receipt = null;
     let lookupFailed = false;
@@ -413,9 +452,18 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
       `mida: ${config.midaAgent} approved; brief ${shortId(brief.id)} (${brief.author?.name ?? "owner"}, ${brief.assertedAt ?? "unknown time"}): transfer ${brief.amountMon} MON to ${shortAddr(brief.to)}`
     );
 
+    // A journal that will not parse may be hiding a pending payment — refuse
+    // before any new work rather than trust a file we cannot read.
+    let journal;
+    try {
+      journal = readJournal(config.projectDir);
+    } catch {
+      log(`journal: ${JOURNAL_FILE} could not be read or parsed — it may hold a payment that is still pending, so nothing was signed or sent. Fix it by hand; never delete it while a payment may be pending.`);
+      return { exitCode: 4, outcome: "journal-corrupt" };
+    }
+
     // A receipt this agent wrote for this brief settles it — whatever an old
     // journal entry says, the payment and the record both exist.
-    const journal = readJournal(config.projectDir);
     const existing = ownReceiptFor(receipts, brief.id, config.midaAgent);
     if (existing) {
       // if a journaled entry survived, mark it with the receipt rather than
@@ -455,6 +503,13 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
           log(`journal: a signed transaction for this brief is on record (tx ${entry.hash}); a real run re-sends those same bytes and writes the missing receipt.`);
           log("dry run: nothing sent, nothing written.");
           return { exitCode: 0, outcome: "dry-run" };
+        }
+        const check = await verifyJournalEntry({ entry, brief, agentAddress: config.agentAddress });
+        if (!check.ok) {
+          log(
+            `journal: the stored transaction for this brief is not what was signed (${check.why}). Refusing to re-send it — nothing was signed or sent. Check ${JOURNAL_FILE} by hand; never delete it while a payment may be pending.`
+          );
+          return { exitCode: 4, outcome: "journal-invalid", txHash: entry.hash };
         }
         return await sendAndAwait({ config, chain, wallet, mida, log, now, journal, delegation, brief, signed: entry, recovery: true });
       }
@@ -523,7 +578,14 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
       log(`chain: could not prepare the transaction over ${rpcHost(config.rpcUrl)} (${errorClass(error)}). Nothing was sent.`);
       return { exitCode: 4, outcome: "chain-error" };
     }
-    writeJournalEntry(config.projectDir, journal, brief.id, { hash: prepared.hash, raw: prepared.raw, nonce: Number(nonce) });
+    writeJournalEntry(config.projectDir, journal, brief.id, {
+      hash: prepared.hash,
+      raw: prepared.raw,
+      nonce: Number(nonce),
+      to: brief.to,
+      value: brief.amountWei.toString(),
+      memo: brief.memo,
+    });
     return await sendAndAwait({ config, chain, wallet, mida, log, now, journal, delegation, brief, signed: { ...prepared, nonce: Number(nonce) }, recovery: false });
   } finally {
     lock.release();

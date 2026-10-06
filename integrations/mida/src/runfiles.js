@@ -90,14 +90,21 @@ export function readJournal(dir) {
   }
 }
 
+// Atomic: write a temp file, fsync it, rename it over the journal — a crash
+// leaves either the old file or the whole new one, never a truncated mix.
+// Mode 600: the journal holds signed bytes anyone could broadcast.
 function writeJournal(dir, journal) {
-  const fd = fs.openSync(path.join(dir, JOURNAL_FILE), "w");
+  const file = path.join(dir, JOURNAL_FILE);
+  const tmp = `${file}.${process.pid}.tmp`;
+  const fd = fs.openSync(tmp, "w", 0o600);
   try {
     fs.writeFileSync(fd, JSON.stringify(journal, null, 2) + "\n");
     fs.fsyncSync(fd);
   } finally {
     fs.closeSync(fd);
   }
+  fs.chmodSync(tmp, 0o600); // covers a pre-existing temp file, whose mode open(2) leaves alone
+  fs.renameSync(tmp, file);
 }
 
 // Each of the helpers below takes the journal object the run already read, so

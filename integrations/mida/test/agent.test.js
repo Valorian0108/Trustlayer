@@ -573,7 +573,14 @@ describe("runAgent", () => {
     expect(mida.rememberCalls).toHaveLength(0);
     // the signed bytes are on disk before any broadcast, so the next run can re-send them
     const journal = JSON.parse(fs.readFileSync(path.join(dir, ".trustlayer-journal.json"), "utf8"));
-    expect(journal[BRIEF_ID]).toEqual({ hash: txHash, raw: wallet.sendRaws[0], nonce: 7 });
+    expect(journal[BRIEF_ID]).toEqual({
+      hash: txHash,
+      raw: wallet.sendRaws[0],
+      nonce: 7,
+      to: TO,
+      value: "10000000000000000",
+      memo: "TrustLayer x Mida demo",
+    });
   });
 
   it("names the cause when the current base fee is above the journaled transaction's max fee", async () => {
@@ -761,6 +768,73 @@ describe("runAgent", () => {
     expect(journal[BRIEF_ID].dead.reason).toBe("nonce-spent");
     expect(node.payments).toHaveLength(1);
     expect(mida.rememberCalls[0].content.briefRecordId).toBe(BRIEF_B_ID);
+  });
+
+  it("writes the journal atomically with mode 600 and leaves no temp file", async () => {
+    // the journal holds signed bytes anyone could broadcast — never group- or
+    // world-readable, and a crash mid-write must never leave a truncated file
+    const dir = tmpDir();
+    const wallet = makeWallet({ waitPlan: ["timeout"], mineOnSend: false });
+    await run({ wallet, projectDir: dir });
+    const mode = fs.statSync(path.join(dir, ".trustlayer-journal.json")).mode & 0o777;
+    expect(mode.toString(8)).toBe("600");
+    expect(fs.readdirSync(dir).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+  });
+
+  it("refuses with exit 4 when the journal file does not parse", async () => {
+    // a crash once left this file truncated — it may hide a pending payment,
+    // so the run must stop before signing anything, never "unexpected: SyntaxError"
+    const dir = tmpDir();
+    const first = await run({ projectDir: dir });
+    expect(first.result.exitCode).toBe(0);
+    fs.writeFileSync(path.join(dir, ".trustlayer-journal.json"), '{\n  "0x');
+    const { result, lines } = await run({ projectDir: dir });
+    expect(result.exitCode).toBe(4);
+    expect(lines.at(-1)).toContain(".trustlayer-journal.json");
+    expect(lines.at(-1)).toContain("never delete");
+    expect(lines.at(-1)).not.toContain("unexpected");
+  });
+
+  it("refuses to re-send a journaled entry whose bytes do not decode", async () => {
+    // probe 6b: a hand-edited journal points brief B at brief A's mined hash
+    // with junk bytes — on the buggy path B got a receipt naming A's transfer
+    const dir = tmpDir();
+    const node = makeNode();
+    const wallet = makeWallet({ node });
+    const first = await run({ node, wallet, projectDir: dir });
+    expect(first.result.exitCode).toBe(0);
+    const paidHash = node.payments[0].hash;
+    const journal = JSON.parse(fs.readFileSync(path.join(dir, ".trustlayer-journal.json"), "utf8"));
+    journal[BRIEF_B_ID] = { hash: paidHash, raw: "0x01", nonce: 7 };
+    fs.writeFileSync(path.join(dir, ".trustlayer-journal.json"), JSON.stringify(journal));
+    const briefB = `{"trustlayer":1,"action":"transfer","to":"${TO}","amountMon":"0.02","memo":"second"}`;
+    const mida = makeMida({ factsPages: [{ items: [briefFact(BRIEF_B_ID, briefB), briefFact()], cursor: null }] });
+    const { result, lines } = await run({ node, wallet, mida, projectDir: dir });
+    expect(result.exitCode).toBe(4);
+    expect(lines.at(-1)).toContain(".trustlayer-journal.json");
+    expect(mida.rememberCalls).toHaveLength(0);
+    expect(node.payments).toHaveLength(1);
+  });
+
+  it("refuses a journaled entry whose signed bytes carry a different amount than the brief", async () => {
+    // a subtler hand-edit: A's real signed bytes stored under brief B — they
+    // decode and hash correctly, but carry 0.01 MON where B asks 0.02
+    const dir = tmpDir();
+    const node = makeNode();
+    const wallet = makeWallet({ node });
+    const first = await run({ node, wallet, projectDir: dir });
+    expect(first.result.exitCode).toBe(0);
+    const journal = JSON.parse(fs.readFileSync(path.join(dir, ".trustlayer-journal.json"), "utf8"));
+    journal[BRIEF_B_ID] = { hash: node.payments[0].hash, raw: wallet.sendRaws[0], nonce: 7 };
+    fs.writeFileSync(path.join(dir, ".trustlayer-journal.json"), JSON.stringify(journal));
+    const briefB = `{"trustlayer":1,"action":"transfer","to":"${TO}","amountMon":"0.02","memo":"second"}`;
+    const mida = makeMida({ factsPages: [{ items: [briefFact(BRIEF_B_ID, briefB), briefFact()], cursor: null }] });
+    const { result, lines } = await run({ node, wallet, mida, projectDir: dir });
+    expect(result.exitCode).toBe(4);
+    expect(lines.at(-1)).toContain("0.01");
+    expect(lines.at(-1)).toContain("0.02");
+    expect(mida.rememberCalls).toHaveLength(0);
+    expect(node.payments).toHaveLength(1);
   });
 
   it("send error: no 'Nothing was sent', re-run re-sends the same bytes", async () => {
