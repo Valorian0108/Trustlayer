@@ -7,7 +7,7 @@ import path from "node:path";
 // the exact same bytes — the same nonce means it can never pay twice.
 
 const LOCK_FILE = ".trustlayer-run.lock";
-const JOURNAL_FILE = ".trustlayer-journal.json";
+export const JOURNAL_FILE = ".trustlayer-journal.json";
 
 export class LockHeldError extends Error {
   constructor(pid) {
@@ -100,15 +100,24 @@ function writeJournal(dir, journal) {
   }
 }
 
-export function writeJournalEntry(dir, briefId, entry) {
-  const journal = readJournal(dir);
+// Each of the helpers below takes the journal object the run already read, so
+// the in-memory copy stays authoritative: it is mutated and persisted together.
+export function writeJournalEntry(dir, journal, briefId, entry) {
   journal[briefId] = entry;
   writeJournal(dir, journal);
 }
 
-export function markJournalReceipted(dir, briefId, receipted) {
-  const journal = readJournal(dir);
+export function markJournalReceipted(dir, journal, briefId, receipted) {
   if (!journal[briefId]) return;
   journal[briefId] = { ...journal[briefId], receipted };
+  writeJournal(dir, journal);
+}
+
+// A dead entry is kept — with the reason — so the same brief is never signed
+// for again, and so a later run can say why the transaction it held can never
+// land instead of forgetting it ever existed.
+export function markJournalDead(dir, journal, briefId, dead) {
+  if (!journal[briefId]) return;
+  journal[briefId] = { ...journal[briefId], dead };
   writeJournal(dir, journal);
 }

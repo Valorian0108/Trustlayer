@@ -16,6 +16,7 @@ const ASSERTED = "2026-10-09T08:50:12Z";
 const TX_HASH = "0xabc123def456";
 const RECEIPT_ID = "0xf7d4bf13abcd9e";
 const BRIEF_ID = "0xd9d35dc2c50055f8";
+const BRIEF_B_ID = "0xb7c8d9e0f1a2b3c4";
 const AGENT_KEY = generatePrivateKey();
 const AGENT_ADDR = privateKeyToAccount(AGENT_KEY).address;
 const SHORT_AGENT = `${AGENT_ADDR.slice(0, 6)}…${AGENT_ADDR.slice(-4)}`;
@@ -664,6 +665,79 @@ describe("runAgent", () => {
     expect(second.lines.at(-1)).toContain(txHash);
     expect(second.lines.at(-1)).toContain("cannot tell");
     expect(second.lines.at(-1)).not.toContain("different transaction");
+  });
+
+  it("resolves an older brief's journaled transaction before signing a newer brief", async () => {
+    // brief A's run sent and mined but could not confirm it — its journal entry
+    // is still open. The owner then wrote brief B; a run that signed B while A
+    // was open would orphan A's payment, so the journal is resolved oldest first.
+    const dir = tmpDir();
+    const node = makeNode();
+    const chain = makeChain({ node, receiptPlan: ["throw", "ok"] });
+    const wallet = makeWallet({ node, waitPlan: ["timeout"] });
+    const first = await run({ chain, wallet, projectDir: dir });
+    expect(first.result.exitCode).toBe(4);
+
+    const briefB = `{"trustlayer":1,"action":"transfer","to":"${TO}","amountMon":"0.02","memo":"second"}`;
+    const mida = makeMida({ factsPages: [{ items: [briefFact(BRIEF_B_ID, briefB), briefFact()], cursor: null }] });
+    const second = await run({ chain, wallet, mida, projectDir: dir });
+    expect(second.result.exitCode).toBe(0);
+    // A's transaction already landed in run 1 — its receipt is written first,
+    // then B is signed, sent and receipted in this run
+    expect(node.payments).toHaveLength(2);
+    expect(mida.rememberCalls[0].content.briefRecordId).toBe(BRIEF_ID);
+    expect(mida.rememberCalls[1].content.briefRecordId).toBe(BRIEF_B_ID);
+    const journal = JSON.parse(fs.readFileSync(path.join(dir, ".trustlayer-journal.json"), "utf8"));
+    expect(journal[BRIEF_ID].receipted).toBeTruthy();
+    expect(journal[BRIEF_B_ID].receipted).toBeTruthy();
+    const txHashA = keccak256(wallet.sendRaws[0]);
+    expect(second.lines.some((line) => line.includes(txHashA) && line.includes("confirmed"))).toBe(true);
+  });
+
+  it("signs nothing new while an older journaled transaction is still unresolved", async () => {
+    const dir = tmpDir();
+    const node = makeNode();
+    // the broadcast sat in the mempool: never mined, nonce unspent
+    const wallet = makeWallet({ node, waitPlan: ["timeout"], mineOnSend: false });
+    const first = await run({ node, wallet, projectDir: dir });
+    expect(first.result.exitCode).toBe(4);
+    const txHashA = keccak256(wallet.sendRaws[0]);
+
+    const briefB = `{"trustlayer":1,"action":"transfer","to":"${TO}","amountMon":"0.02","memo":"second"}`;
+    const mida = makeMida({ factsPages: [{ items: [briefFact(BRIEF_B_ID, briefB), briefFact()], cursor: null }] });
+    const second = await run({ node, wallet, mida, projectDir: dir });
+    expect(second.result.exitCode).toBe(4);
+    // the line names the older brief, its hash and nonce, and what resolves it
+    expect(second.lines.at(-1)).toContain("d9d35dc2");
+    expect(second.lines.at(-1)).toContain(txHashA);
+    expect(second.lines.at(-1)).toContain("nonce 7");
+    expect(second.lines.at(-1)).toContain("mines or its nonce is spent");
+    // B was never signed, and A's bytes were only re-broadcast, never re-signed
+    expect(wallet.signCalls).toHaveLength(1);
+    expect(node.payments).toHaveLength(0);
+    expect(mida.rememberCalls).toHaveLength(0);
+  });
+
+  it("marks an older entry dead when its nonce was spent by another transaction, then pays the new brief", async () => {
+    const dir = tmpDir();
+    const node = makeNode();
+    // the first broadcast failed, so brief A's transaction never reached the node
+    const wallet = makeWallet({ node, sendPlan: ["throw", "ok"], waitPlan: ["timeout", "ok"] });
+    const first = await run({ node, wallet, projectDir: dir });
+    expect(first.result.exitCode).toBe(4);
+    // meanwhile the wallet spent nonce 7 in a transaction this agent never saw
+    node.nonce = 8;
+
+    const briefB = `{"trustlayer":1,"action":"transfer","to":"${TO}","amountMon":"0.02","memo":"second"}`;
+    const mida = makeMida({ factsPages: [{ items: [briefFact(BRIEF_B_ID, briefB), briefFact()], cursor: null }] });
+    const second = await run({ node, wallet, mida, projectDir: dir });
+    expect(second.result.exitCode).toBe(0);
+    // A's entry is kept, marked dead with the reason — then B pays normally
+    const journal = JSON.parse(fs.readFileSync(path.join(dir, ".trustlayer-journal.json"), "utf8"));
+    expect(journal[BRIEF_ID].dead).toBeTruthy();
+    expect(journal[BRIEF_ID].dead.reason).toBe("nonce-spent");
+    expect(node.payments).toHaveLength(1);
+    expect(mida.rememberCalls[0].content.briefRecordId).toBe(BRIEF_B_ID);
   });
 
   it("send error: no 'Nothing was sent', re-run re-sends the same bytes", async () => {

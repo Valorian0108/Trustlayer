@@ -1,9 +1,9 @@
 import { isMidaSdkError } from "@mida-context/sdk";
-import { zeroAddress } from "viem";
+import { formatEther, parseTransaction, zeroAddress } from "viem";
 import { monadTestnet } from "viem/chains";
 import { BriefError, parseBrief, pickBrief, shortId } from "./brief.js";
 import { alreadyDoneLine, decide, noDelegationLine, ownReceiptFor } from "./decide.js";
-import { acquireLock, LockHeldError, markJournalReceipted, readJournal, writeJournalEntry } from "./runfiles.js";
+import { acquireLock, JOURNAL_FILE, LockHeldError, markJournalDead, markJournalReceipted, readJournal, writeJournalEntry } from "./runfiles.js";
 import { autoCapMon, ChainError, errorClass, readDelegation, rpcHost, shortAddr } from "./trustlayer.js";
 
 const BRIEF_NAMESPACE = "preferences.communication";
@@ -42,10 +42,37 @@ function midaRefusedLine(error) {
   return `mida: ${what} (${error.code}) — ${error.message.replace(/\.$/, "")}. Nothing was sent.`;
 }
 
+function receiptContent({ config, delegation, brief, hash, receipt, now }) {
+  return {
+    trustlayerReceipt: 1,
+    briefRecordId: brief.id,
+    delegation: {
+      registry: config.registry,
+      chainId: monadTestnet.id,
+      id: delegation.id,
+      tier: delegation.tier,
+      tierName: delegation.tierName,
+      autoCapMon: autoCapMon(delegation.tier),
+      expiresAt: delegation.expiresAt,
+      owner: delegation.owner,
+    },
+    action: { kind: "transfer", to: brief.to, amountMon: brief.amountMon, amountWei: String(brief.amountWei), memo: brief.memo },
+    tx: { hash, block: receipt.blockNumber.toString(), status: receipt.status, from: config.agentAddress, chainId: monadTestnet.id },
+    at: now().toISOString(),
+  };
+}
+
+function deadReasonText(dead) {
+  if (dead.reason === "nonce-spent") return "its nonce was spent by a different transaction";
+  if (dead.reason === "reverted") return "it reverted on-chain";
+  if (dead.reason === "replaced") return `it was replaced by ${dead.detail ?? "a different transaction"}`;
+  return dead.reason ?? "an unknown reason";
+}
+
 // Broadcast the signed bytes, then wait for the journaled hash. A send error
 // does NOT mean nothing reached the node (viem retries the broadcast after
 // its own timeout and on 5xx/429), so the wait runs either way.
-async function sendAndAwait({ config, chain, wallet, mida, log, now, delegation, brief, signed, recovery }) {
+async function sendAndAwait({ config, chain, wallet, mida, log, now, journal, delegation, brief, signed, recovery }) {
   if (recovery) {
     log(`journal: a signed transaction for this brief is on record (tx ${signed.hash}); re-sending the same bytes — it cannot pay twice.`);
   }
@@ -86,10 +113,13 @@ async function sendAndAwait({ config, chain, wallet, mida, log, now, delegation,
     try {
       const latest = await chain.getTransactionCount({ address: config.agentAddress, blockTag: "latest" });
       if (BigInt(latest) > BigInt(signed.nonce)) {
+        if (!lookupFailed) {
+          markJournalDead(config.projectDir, journal, brief.id, { reason: "nonce-spent", at: now().toISOString() });
+        }
         log(
           lookupFailed
             ? `chain: the nonce the journaled transaction used is spent, but the node cannot tell whether tx ${signed.hash} is what spent it — its receipt lookup failed. Whether it landed is unknown; do not delete the journal — running again re-checks.`
-            : `chain: the nonce the journaled transaction used was already spent by a different transaction — tx ${signed.hash} can never land. No Mida receipt was written; the journal keeps the record.`
+            : `chain: the nonce the journaled transaction used was already spent by a different transaction — tx ${signed.hash} can never land. No Mida receipt was written; the journal keeps the record, marked dead.`
         );
         return { exitCode: 4, outcome: "nonce-spent", txHash: signed.hash };
       }
@@ -110,12 +140,14 @@ async function sendAndAwait({ config, chain, wallet, mida, log, now, delegation,
   }
 
   if (receipt.transactionHash && receipt.transactionHash.toLowerCase() !== signed.hash.toLowerCase()) {
+    markJournalDead(config.projectDir, journal, brief.id, { reason: "replaced", detail: receipt.transactionHash, at: now().toISOString() });
     log(
       `chain: tx ${signed.hash} was replaced before it mined — the mined transaction is ${receipt.transactionHash}. The journaled nonce is spent by that transaction; running again reports the same. No Mida receipt was written.`
     );
     return { exitCode: 4, outcome: "replaced", txHash: signed.hash };
   }
   if (receipt.status !== "success") {
+    markJournalDead(config.projectDir, journal, brief.id, { reason: "reverted", at: now().toISOString() });
     log(`chain: tx ${signed.hash} reverted. No Mida receipt was written.`);
     return { exitCode: 4, outcome: "reverted", txHash: signed.hash };
   }
@@ -125,23 +157,7 @@ async function sendAndAwait({ config, chain, wallet, mida, log, now, delegation,
       : `sent: ${brief.amountMon} MON to ${shortAddr(brief.to)} — tx ${signed.hash} (block ${receipt.blockNumber.toLocaleString("en-US")})`
   );
 
-  const content = {
-    trustlayerReceipt: 1,
-    briefRecordId: brief.id,
-    delegation: {
-      registry: config.registry,
-      chainId: monadTestnet.id,
-      id: delegation.id,
-      tier: delegation.tier,
-      tierName: delegation.tierName,
-      autoCapMon: autoCapMon(delegation.tier),
-      expiresAt: delegation.expiresAt,
-      owner: delegation.owner,
-    },
-    action: { kind: "transfer", to: brief.to, amountMon: brief.amountMon, amountWei: brief.amountWei.toString(), memo: brief.memo },
-    tx: { hash: signed.hash, block: receipt.blockNumber.toString(), status: receipt.status, from: config.agentAddress, chainId: monadTestnet.id },
-    at: now().toISOString(),
-  };
+  const content = receiptContent({ config, delegation, brief, hash: signed.hash, receipt, now });
   let saved;
   try {
     saved = await mida.remember({ namespace: RECEIPT_NAMESPACE, kind: "EPISODE", content });
@@ -157,13 +173,94 @@ async function sendAndAwait({ config, chain, wallet, mida, log, now, delegation,
   // Keep the entry and mark it receipted: the record list can silently skip a
   // just-written receipt on the next read, and the journal alone decides
   // whether this brief may ever be signed for again.
-  markJournalReceipted(config.projectDir, brief.id, { id: saved.id, at: now().toISOString() });
+  markJournalReceipted(config.projectDir, journal, brief.id, { id: saved.id, at: now().toISOString() });
   log(
     saved.state === "pending"
       ? `recorded: Mida receipt ${shortId(saved.id)} (pending) in projects.current — it anchors with the next batch.`
       : `recorded: Mida receipt ${shortId(saved.id)} (anchored) in projects.current, author ${config.midaAgent}`
   );
   return { exitCode: 0, outcome: recovery ? "recovered" : "sent", txHash: signed.hash, receiptId: saved.id };
+}
+
+// Resolve one open journal entry — an older signed transaction that blocks all
+// new signing — without ever signing anything new. Confirmed on-chain → write
+// that brief's missing receipt; nonce provably spent by another transaction →
+// mark the entry dead (kept, with the reason); anything else → re-broadcast the
+// same bytes once and report "unresolved" so the caller signs nothing new.
+async function resolveJournalEntry({ config, chain, wallet, mida, log, now, journal, delegation, entryId, entry }) {
+  let decoded;
+  try {
+    decoded = parseTransaction(entry.raw);
+  } catch {
+    log(
+      `journal: the stored bytes for brief ${shortId(entryId)} do not decode as a transaction. Refusing to re-send them and signing nothing new — check ${JOURNAL_FILE} by hand.`
+    );
+    return "invalid";
+  }
+  for (let pass = 0; pass < 2; pass += 1) {
+    let receipt = null;
+    let lookupFailed = false;
+    try {
+      receipt = await chain.getTransactionReceipt({ hash: entry.hash });
+    } catch (error) {
+      if (!(error && error.name === "TransactionReceiptNotFoundError")) lookupFailed = true;
+    }
+    if (receipt && receipt.status === "success") {
+      // the transaction landed; the missing piece is this brief's receipt
+      log(
+        `journal: the journaled transaction for brief ${shortId(entryId)} is confirmed (tx ${entry.hash}, block ${receipt.blockNumber.toLocaleString("en-US")}). Writing the missing receipt now.`
+      );
+      const recoveredBrief = {
+        id: entryId,
+        to: decoded.to,
+        amountMon: formatEther(decoded.value ?? 0n),
+        amountWei: decoded.value ?? 0n,
+        memo: entry.memo,
+      };
+      const content = receiptContent({ config, delegation, brief: recoveredBrief, hash: entry.hash, receipt, now });
+      try {
+        const saved = await mida.remember({ namespace: RECEIPT_NAMESPACE, kind: "EPISODE", content });
+        markJournalReceipted(config.projectDir, journal, entryId, { id: saved.id, at: now().toISOString() });
+        log(`recorded: Mida receipt ${shortId(saved.id)} for brief ${shortId(entryId)} — the journaled entry is marked receipted.`);
+        return "receipted";
+      } catch (error) {
+        if (isMidaSdkError(error)) {
+          log(
+            `mida: the journaled transfer for brief ${shortId(entryId)} happened (tx ${entry.hash}) but the receipt write failed (${error.code}) — ${error.message.replace(/\.$/, "")}. The entry stays open; running again retries the write.`
+          );
+          return "unresolved";
+        }
+        throw error;
+      }
+    }
+    if (receipt) {
+      markJournalDead(config.projectDir, journal, entryId, { reason: "reverted", at: now().toISOString() });
+      log(`journal: the journaled transaction for brief ${shortId(entryId)} reverted on-chain (tx ${entry.hash}) — it can never pay. The entry is kept, marked dead.`);
+      return "dead";
+    }
+    try {
+      const latest = await chain.getTransactionCount({ address: config.agentAddress, blockTag: "latest" });
+      if (BigInt(latest) > BigInt(entry.nonce) && !lookupFailed) {
+        markJournalDead(config.projectDir, journal, entryId, { reason: "nonce-spent", at: now().toISOString() });
+        log(
+          `journal: the nonce of the journaled transaction for brief ${shortId(entryId)} was spent by a different transaction — tx ${entry.hash} can never land. The entry is kept, marked dead.`
+        );
+        return "dead";
+      }
+    } catch {
+      // the node cannot say — treat as unresolved rather than guessing
+    }
+    if (pass === 0) {
+      // still open — re-broadcast the same bytes so a dropped transaction
+      // re-enters the mempool, then check once more
+      try {
+        await wallet.sendRawTransaction({ serializedTransaction: entry.raw });
+      } catch {
+        // the node may already hold the bytes — the outcome is the same
+      }
+    }
+  }
+  return "unresolved";
 }
 
 export async function runAgent({ config, chain, wallet, mida, log, now = () => new Date(), dryRun = false }) {
@@ -296,30 +393,67 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
       // if a journaled entry survived, mark it with the receipt rather than
       // trusting the next read-back to see it again — a dry run writes nothing
       if (!dryRun && journal[brief.id]) {
-        markJournalReceipted(config.projectDir, brief.id, { id: existing.id, at: now().toISOString() });
+        markJournalReceipted(config.projectDir, journal, brief.id, { id: existing.id, at: now().toISOString() });
       }
       log(alreadyDoneLine(existing, brief.id));
       return { exitCode: 0, outcome: "already-done" };
     }
 
-    // A journaled transaction for this brief means an earlier run already
-    // decided to send and signed. A receipted entry ends it; an open entry's
-    // only safe move is to re-broadcast those exact bytes — the nonce inside
-    // them means the chain sees one transaction.
-    const journaled = journal[brief.id];
-    if (journaled) {
-      if (journaled.receipted) {
+    // Resolve every open journal entry before signing anything new, oldest
+    // first. Each entry holds a signed transaction for this wallet's one nonce
+    // sequence: an entry left open means a signed transaction whose outcome is
+    // still unknown, and while one is open nothing new may be signed — not for
+    // this brief, not for any. A receipted entry ends its brief; a dead entry's
+    // transaction can never land; an open one is recovered, resolved, or blocks.
+    let blockedDryRun = false;
+    for (const [entryId, entry] of Object.entries(journal)) {
+      const isCurrentBrief = entryId === brief.id;
+      if (entry.receipted) {
+        if (!isCurrentBrief) continue;
         log(
-          `already done (journal): this brief's transfer was already sent and its receipt recorded (tx ${journaled.hash}, receipt ${shortId(journaled.receipted.id)}). Nothing was sent.`
+          `already done (journal): this brief's transfer was already sent and its receipt recorded (tx ${entry.hash}, receipt ${shortId(entry.receipted.id)}). Nothing was sent.`
         );
         return { exitCode: 0, outcome: "already-done" };
       }
-      if (dryRun) {
-        log(`journal: a signed transaction for this brief is on record (tx ${journaled.hash}); a real run re-sends those same bytes and writes the missing receipt.`);
-        log("dry run: nothing sent, nothing written.");
-        return { exitCode: 0, outcome: "dry-run" };
+      if (entry.dead) {
+        if (!isCurrentBrief) continue;
+        log(
+          `journal: the signed transaction for this brief can never land (${deadReasonText(entry.dead)}). This agent will not sign a second transaction for the same brief — a new brief record is needed to pay it. Nothing was sent.`
+        );
+        return { exitCode: 4, outcome: "journal-dead", txHash: entry.hash };
       }
-      return await sendAndAwait({ config, chain, wallet, mida, log, now, delegation, brief, signed: journaled, recovery: true });
+      if (isCurrentBrief) {
+        if (dryRun) {
+          log(`journal: a signed transaction for this brief is on record (tx ${entry.hash}); a real run re-sends those same bytes and writes the missing receipt.`);
+          log("dry run: nothing sent, nothing written.");
+          return { exitCode: 0, outcome: "dry-run" };
+        }
+        return await sendAndAwait({ config, chain, wallet, mida, log, now, journal, delegation, brief, signed: entry, recovery: true });
+      }
+      const ownReceipt = ownReceiptFor(receipts, entryId, config.midaAgent);
+      if (ownReceipt) {
+        if (!dryRun) markJournalReceipted(config.projectDir, journal, entryId, { id: ownReceipt.id, at: now().toISOString() });
+        continue;
+      }
+      if (dryRun) {
+        log(
+          `journal: brief ${shortId(entryId)} has an unresolved signed transaction (tx ${entry.hash}, nonce ${entry.nonce}) — a real run resolves it before signing anything new.`
+        );
+        blockedDryRun = true;
+        continue;
+      }
+      const state = await resolveJournalEntry({ config, chain, wallet, mida, log, now, journal, delegation, entryId, entry });
+      if (state === "invalid") return { exitCode: 4, outcome: "journal-invalid", txHash: entry.hash };
+      if (state === "unresolved") {
+        log(
+          `journal: brief ${shortId(entryId)} has a signed transaction still unresolved (tx ${entry.hash}, nonce ${entry.nonce}). Nothing new was signed. It resolves when that transaction mines or its nonce is spent — running again re-broadcasts the same bytes and re-checks.`
+        );
+        return { exitCode: 4, outcome: "journal-blocked", txHash: entry.hash };
+      }
+    }
+    if (blockedDryRun) {
+      log("dry run: nothing sent, nothing written.");
+      return { exitCode: 0, outcome: "dry-run" };
     }
 
     let balanceWei;
@@ -352,8 +486,8 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
       log(`chain: could not prepare the transaction over ${rpcHost(config.rpcUrl)} (${errorClass(error)}). Nothing was sent.`);
       return { exitCode: 4, outcome: "chain-error" };
     }
-    writeJournalEntry(config.projectDir, brief.id, { hash: prepared.hash, raw: prepared.raw, nonce: Number(nonce) });
-    return await sendAndAwait({ config, chain, wallet, mida, log, now, delegation, brief, signed: { ...prepared, nonce: Number(nonce) }, recovery: false });
+    writeJournalEntry(config.projectDir, journal, brief.id, { hash: prepared.hash, raw: prepared.raw, nonce: Number(nonce) });
+    return await sendAndAwait({ config, chain, wallet, mida, log, now, journal, delegation, brief, signed: { ...prepared, nonce: Number(nonce) }, recovery: false });
   } finally {
     lock.release();
   }
