@@ -750,6 +750,36 @@ describe("runAgent", () => {
     expect(mida.rememberCalls).toHaveLength(0);
   });
 
+  it("says the mined transfer resolves when the receipt write succeeds, not 'when that transaction mines'", async () => {
+    const dir = tmpDir();
+    const node = makeNode();
+    // run 1: A's transaction mined but the wait timed out and the receipt
+    // lookup failed, so the journal entry stays open while the payment is
+    // already on-chain
+    const chain = makeChain({ node, receiptPlan: ["throw"] });
+    const wallet = makeWallet({ node, waitPlan: ["timeout"] });
+    const first = await run({ chain, wallet, projectDir: dir });
+    expect(first.result.exitCode).toBe(4);
+
+    // the owner wrote B. Run 2 finds A's receipt, but Mida refuses the receipt
+    // write — the transaction has already mined, so what resolves the entry is
+    // the receipt write, and the line must not claim otherwise
+    const briefB = `{"trustlayer":1,"action":"transfer","to":"${TO}","amountMon":"0.02","memo":"second"}`;
+    const mida = makeMida({
+      factsPages: [{ items: [briefFact(BRIEF_B_ID, briefB), briefFact()], cursor: null }],
+      rememberError: new MidaSdkError("rate-limited", "one write per minute on this lane"),
+    });
+    const second = await run({ chain: makeChain({ node }), wallet: makeWallet({ node }), mida, projectDir: dir });
+    expect(second.result.exitCode).toBe(4);
+    expect(second.lines.at(-2)).toContain("happened");
+    expect(second.lines.at(-1)).toContain("resolves when the receipt write succeeds");
+    expect(second.lines.at(-1)).not.toContain("when that transaction mines");
+    // nothing was signed, nothing new was paid, and the entry stays open
+    expect(node.payments).toHaveLength(1);
+    const journal = JSON.parse(fs.readFileSync(path.join(dir, ".trustlayer-journal.json"), "utf8"));
+    expect(journal[BRIEF_ID].receipted).toBeUndefined();
+  });
+
   it("marks an older entry dead when its nonce was spent by another transaction, then pays the new brief", async () => {
     const dir = tmpDir();
     const node = makeNode();

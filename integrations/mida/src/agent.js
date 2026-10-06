@@ -313,7 +313,7 @@ async function resolveJournalEntry({ config, chain, wallet, mida, log, now, jour
           log(
             `mida: the journaled transfer for brief ${shortId(entryId)} happened (tx ${entry.hash}) but the receipt write failed (${error.code}) — ${error.message.replace(/\.$/, "")}. The entry stays open; running again retries the write.`
           );
-          return "unresolved";
+          return "receipt-write-failed";
         }
         throw error;
       }
@@ -585,9 +585,11 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
       signedTxHash = entry.hash;
       const state = await resolveJournalEntry({ config, chain, wallet, mida, log, now, journal, delegation, entryId, entry });
       if (state === "invalid") return { exitCode: 4, outcome: "journal-invalid", txHash: entry.hash };
-      if (state === "unresolved") {
+      if (state === "unresolved" || state === "receipt-write-failed") {
         log(
-          `journal: brief ${shortId(entryId)} has a signed transaction still unresolved (tx ${entry.hash}, nonce ${entry.nonce}). Nothing new was signed. It resolves when that transaction mines or its nonce is spent — running again re-broadcasts the same bytes and re-checks.`
+          state === "receipt-write-failed"
+            ? `journal: brief ${shortId(entryId)} has a signed transaction still unresolved (tx ${entry.hash}, nonce ${entry.nonce}). Nothing new was signed. The transfer has already mined — it resolves when the receipt write succeeds; running again retries the write.`
+            : `journal: brief ${shortId(entryId)} has a signed transaction still unresolved (tx ${entry.hash}, nonce ${entry.nonce}). Nothing new was signed. It resolves when that transaction mines or its nonce is spent — running again re-broadcasts the same bytes and re-checks.`
         );
         return { exitCode: 4, outcome: "journal-blocked", txHash: entry.hash };
       }
