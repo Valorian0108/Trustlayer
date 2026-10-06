@@ -38,7 +38,7 @@ export function createChain(config) {
   return createPublicClient({ chain: monadTestnet, transport: http(config.rpcUrl) });
 }
 
-function rpcHost(rpcUrl) {
+export function rpcHost(rpcUrl) {
   try {
     return new URL(rpcUrl).host;
   } catch {
@@ -46,7 +46,7 @@ function rpcHost(rpcUrl) {
   }
 }
 
-function errorClass(error) {
+export function errorClass(error) {
   return error instanceof Error ? error.name : "Error";
 }
 

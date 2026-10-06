@@ -4,12 +4,16 @@ import { shortId } from "./brief.js";
 
 const TRANSFER_GAS_LIMIT = 21000n;
 
+export function noDelegationLine({ owner, agent }) {
+  return `trustlayer: no valid delegation from ${shortAddr(owner)} to ${shortAddr(agent)} on the DelegationRegistry (revoked, expired or never created). Nothing was sent.`;
+}
+
 export function decide({ delegation, brief, receipts, balanceWei, gasPriceWei }) {
   if (!delegation.valid) {
     return {
       kind: "refuse",
       code: "no-delegation",
-      line: `trustlayer: no valid delegation from ${shortAddr(delegation.owner)} to ${shortAddr(delegation.agent)} on the DelegationRegistry (revoked, expired or never created). Nothing was sent.`,
+      line: noDelegationLine(delegation),
     };
   }
 

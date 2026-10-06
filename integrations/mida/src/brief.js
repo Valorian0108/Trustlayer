@@ -22,7 +22,9 @@ export function pickBrief(items) {
     } catch {
       continue;
     }
-    if (parsed && parsed.trustlayer === 1) return { id: item.id, ...parsed };
+    if (parsed && parsed.trustlayer === 1) {
+      return { id: item.id, author: item.author ?? null, assertedAt: item.content?.assertedAt ?? item.writtenAt ?? null, ...parsed };
+    }
   }
   return null;
 }
