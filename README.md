@@ -1,5 +1,7 @@
 # Trust Layer
 
+![Trust Layer Logo](assets/logo.jpg)
+
 ## A Proportional Authorization Infrastructure for AI Agents
 
 > **Small action: proceed. High-stakes action: prove authorization first.**
@@ -129,7 +131,7 @@ The following components are currently live:
 
 ## Simulated
 
-TThe following remains simulated in the current prototype:
+The following remains simulated in the current prototype:
 
 final anonymous ZK proof generation;
 
