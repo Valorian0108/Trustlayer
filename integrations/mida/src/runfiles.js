@@ -74,7 +74,10 @@ export function acquireLock(dir) {
   throw new LockHeldError(readLockPid(file) ?? -1);
 }
 
-// Journal shape: { [briefId]: { hash, raw, nonce } }. A corrupt journal is
+// Journal shape: { [briefId]: { hash, raw, nonce, receipted?, dead? } }.
+// Entries are never removed: a brief with any entry is never signed for again —
+// the receipt read-back can silently skip a just-written receipt, so the
+// journal alone decides whether a brief may be paid. A corrupt journal is
 // never ignored — it throws, the run exits before any send, and the owner
 // fixes or removes it by hand.
 export function readJournal(dir) {
@@ -103,14 +106,9 @@ export function writeJournalEntry(dir, briefId, entry) {
   writeJournal(dir, journal);
 }
 
-export function removeJournalEntry(dir, briefId) {
+export function markJournalReceipted(dir, briefId, receipted) {
   const journal = readJournal(dir);
-  if (!Object.hasOwn(journal, briefId)) return;
-  delete journal[briefId];
-  const file = path.join(dir, JOURNAL_FILE);
-  if (Object.keys(journal).length === 0) {
-    fs.unlinkSync(file);
-    return;
-  }
+  if (!journal[briefId]) return;
+  journal[briefId] = { ...journal[briefId], receipted };
   writeJournal(dir, journal);
 }

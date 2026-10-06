@@ -3,7 +3,7 @@ import { zeroAddress } from "viem";
 import { monadTestnet } from "viem/chains";
 import { BriefError, parseBrief, pickBrief, shortId } from "./brief.js";
 import { alreadyDoneLine, decide, noDelegationLine, ownReceiptFor } from "./decide.js";
-import { acquireLock, LockHeldError, readJournal, removeJournalEntry, writeJournalEntry } from "./runfiles.js";
+import { acquireLock, LockHeldError, markJournalReceipted, readJournal, writeJournalEntry } from "./runfiles.js";
 import { autoCapMon, ChainError, errorClass, readDelegation, rpcHost, shortAddr } from "./trustlayer.js";
 
 const BRIEF_NAMESPACE = "preferences.communication";
@@ -154,7 +154,10 @@ async function sendAndAwait({ config, chain, wallet, mida, log, now, delegation,
     }
     throw error;
   }
-  removeJournalEntry(config.projectDir, brief.id);
+  // Keep the entry and mark it receipted: the record list can silently skip a
+  // just-written receipt on the next read, and the journal alone decides
+  // whether this brief may ever be signed for again.
+  markJournalReceipted(config.projectDir, brief.id, { id: saved.id, at: now().toISOString() });
   log(
     saved.state === "pending"
       ? `recorded: Mida receipt ${shortId(saved.id)} (pending) in projects.current — it anchors with the next batch.`
@@ -287,18 +290,30 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
 
     // A receipt this agent wrote for this brief settles it — whatever an old
     // journal entry says, the payment and the record both exist.
+    const journal = readJournal(config.projectDir);
     const existing = ownReceiptFor(receipts, brief.id, config.midaAgent);
     if (existing) {
-      removeJournalEntry(config.projectDir, brief.id);
+      // if a journaled entry survived, mark it with the receipt rather than
+      // trusting the next read-back to see it again — a dry run writes nothing
+      if (!dryRun && journal[brief.id]) {
+        markJournalReceipted(config.projectDir, brief.id, { id: existing.id, at: now().toISOString() });
+      }
       log(alreadyDoneLine(existing, brief.id));
       return { exitCode: 0, outcome: "already-done" };
     }
 
     // A journaled transaction for this brief means an earlier run already
-    // decided to send and signed. The only safe move is to re-broadcast those
-    // exact bytes — the nonce inside them means the chain sees one transaction.
-    const journaled = readJournal(config.projectDir)[brief.id];
+    // decided to send and signed. A receipted entry ends it; an open entry's
+    // only safe move is to re-broadcast those exact bytes — the nonce inside
+    // them means the chain sees one transaction.
+    const journaled = journal[brief.id];
     if (journaled) {
+      if (journaled.receipted) {
+        log(
+          `already done (journal): this brief's transfer was already sent and its receipt recorded (tx ${journaled.hash}, receipt ${shortId(journaled.receipted.id)}). Nothing was sent.`
+        );
+        return { exitCode: 0, outcome: "already-done" };
+      }
       if (dryRun) {
         log(`journal: a signed transaction for this brief is on record (tx ${journaled.hash}); a real run re-sends those same bytes and writes the missing receipt.`);
         log("dry run: nothing sent, nothing written.");

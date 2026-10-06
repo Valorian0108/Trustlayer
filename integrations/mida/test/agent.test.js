@@ -307,8 +307,34 @@ describe("runAgent", () => {
       tx: { hash: txHash, block: "68990001", status: "success", from: AGENT_ADDR, chainId: 10143 },
       at: NOW_ISO,
     });
-    // the journal entry is gone once the receipt is written
-    expect(fs.existsSync(path.join(dir, ".trustlayer-journal.json"))).toBe(false);
+    // the journal keeps the entry — marked receipted — because the next
+    // read-back may not see the receipt yet, and the journal alone decides
+    // whether this brief may ever be signed for again
+    const journaled = JSON.parse(fs.readFileSync(path.join(dir, ".trustlayer-journal.json"), "utf8"));
+    expect(journaled[BRIEF_ID]).toMatchObject({ hash: txHash, nonce: 7, receipted: { id: RECEIPT_ID } });
+  });
+
+  it("never signs for a brief with a journal entry, even when the receipt read-back misses it", async () => {
+    // the store skips rows its RPC has not seen yet without setting `partial` —
+    // a quick re-run then sees an empty receipt list, and only the journaled
+    // entry stands between the owner and a second payment
+    const dir = tmpDir();
+    const node = makeNode();
+    const wallet = makeWallet({ node });
+    const first = await run({ node, wallet, mida: makeMida(), projectDir: dir });
+    expect(first.result.exitCode).toBe(0);
+
+    const second = await run({
+      node,
+      wallet,
+      mida: makeMida({ receiptPages: [{ items: [], cursor: null }] }),
+      projectDir: dir,
+    });
+    expect(second.result.exitCode).toBe(0);
+    expect(second.lines.at(-1)).toContain("already done (journal)");
+    expect(second.lines.at(-1)).toContain("Nothing was sent");
+    expect(wallet.sendRaws).toHaveLength(1);
+    expect(node.payments).toHaveLength(1);
   });
 
   it("refuses before touching Mida when the delegation is invalid", async () => {
@@ -582,7 +608,9 @@ describe("runAgent", () => {
     expect(wallet.sendRaws[1]).toBe(wallet.sendRaws[0]);
     expect(second.lines.some((line) => line.startsWith("recovered:"))).toBe(true);
     expect(secondMida.rememberCalls).toHaveLength(1);
-    expect(fs.existsSync(path.join(dir, ".trustlayer-journal.json"))).toBe(false);
+    // the entry stays, marked with the receipt the re-run wrote
+    const journaled = JSON.parse(fs.readFileSync(path.join(dir, ".trustlayer-journal.json"), "utf8"));
+    expect(journaled[BRIEF_ID].receipted.id).toBe(RECEIPT_ID);
   });
 
   it("wait timeout then re-run: same bytes re-sent, one transfer total", async () => {
