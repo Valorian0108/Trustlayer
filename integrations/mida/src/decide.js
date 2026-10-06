@@ -28,7 +28,7 @@ export function alreadyDoneLine(receipt, briefId) {
   return `already done: receipt ${shortId(receipt.id)} for brief ${shortId(briefId)} exists (tx ${receipt.content.tx?.hash}). Nothing was sent.`;
 }
 
-export function decide({ delegation, brief, receipts, balanceWei, gasPriceWei, agentName }) {
+export function decide({ delegation, brief, receipts, balanceWei, maxFeeWei, agentName }) {
   if (!delegation.valid) {
     return {
       kind: "refuse",
@@ -55,7 +55,7 @@ export function decide({ delegation, brief, receipts, balanceWei, gasPriceWei, a
     };
   }
 
-  if (balanceWei < brief.amountWei + TRANSFER_GAS_LIMIT * gasPriceWei) {
+  if (balanceWei < brief.amountWei + TRANSFER_GAS_LIMIT * maxFeeWei) {
     return {
       kind: "refuse",
       code: "insufficient-funds",

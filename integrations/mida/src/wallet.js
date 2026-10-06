@@ -13,11 +13,11 @@ export function createWallet({ agentPrivateKey, rpcUrl }) {
   const publicClient = createPublicClient({ chain: monadTestnet, transport: http(rpcUrl) });
   return {
     account,
-    // Signs the plain transfer fully offline — explicit nonce and the gas price
-    // the funds check already used — so the bytes can be journaled and, if the
-    // first broadcast's fate is unknown, re-sent without ever becoming a
-    // different transaction.
-    async signTransfer({ to, value, nonce, gas = TRANSFER_GAS_LIMIT, gasPrice }) {
+    // Signs the plain transfer fully offline — explicit nonce and the EIP-1559
+    // fee fields the funds check already used — so the bytes can be journaled
+    // and, if the first broadcast's fate is unknown, re-sent without ever
+    // becoming a different transaction.
+    async signTransfer({ to, value, nonce, gas = TRANSFER_GAS_LIMIT, maxFeePerGas, maxPriorityFeePerGas }) {
       const transfer = buildTransfer({ to, amountWei: value });
       const raw = await account.signTransaction({
         chainId: transfer.chain.id,
@@ -25,7 +25,8 @@ export function createWallet({ agentPrivateKey, rpcUrl }) {
         to: transfer.to,
         value: transfer.value,
         gas,
-        gasPrice,
+        maxFeePerGas,
+        maxPriorityFeePerGas,
       });
       return { raw, hash: keccak256(raw) };
     },

@@ -285,8 +285,11 @@ describe("runAgent", () => {
       "recorded: Mida receipt 0xf7d4bf13… (anchored) in projects.current, author trustlayer-agent",
     ]);
     expect(result.exitCode).toBe(0);
-    // signed with the explicit pending nonce, gas 21000 and the gas price the funds check saw
-    expect(wallet.signCalls).toEqual([{ to: TO, value: 10_000_000_000_000_000n, nonce: 7, gas: 21000n, gasPrice: 1_000_000_000n }]);
+    // signed with the explicit pending nonce, gas 21000 and a max fee of twice
+    // the going gas price — the chain still charges only what the block needs
+    expect(wallet.signCalls).toEqual([
+      { to: TO, value: 10_000_000_000_000_000n, nonce: 7, gas: 21000n, maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1_000_000_000n },
+    ]);
     expect(wallet.waits).toEqual([txHash]);
     expect(mida.rememberCalls).toHaveLength(1);
     expect(mida.rememberCalls[0].namespace).toBe("projects.current");
@@ -511,19 +514,21 @@ describe("runAgent", () => {
     expect(wallet.sendRaws).toHaveLength(0);
   });
 
-  it("checks the balance against exactly the fee the signed transaction bids", async () => {
-    // balance = amount + 21000 * gasPrice passes; one wei less must refuse —
-    // and the fee the check used is the fee the signature carries
+  it("checks the balance against exactly the max fee the signed transaction bids", async () => {
+    // the signed max fee is 2x the gas price; balance = amount + 21000 * maxFee
+    // passes, one wei less must refuse — and the cap the check used is the cap
+    // the signature carries
     const gasPriceWei = 2_000_000_000n;
+    const maxFeeWei = gasPriceWei * 2n;
     const amountWei = parseEther("0.01");
-    const node = makeNode({ balanceWei: amountWei + 21_000n * gasPriceWei, gasPriceWei });
+    const node = makeNode({ balanceWei: amountWei + 21_000n * maxFeeWei, gasPriceWei });
     const wallet = makeWallet({ node });
     const { result } = await run({ node, wallet });
     expect(result.exitCode).toBe(0);
-    expect(wallet.signCalls[0].gasPrice).toBe(gasPriceWei);
+    expect(wallet.signCalls[0].maxFeePerGas).toBe(maxFeeWei);
     expect(wallet.signCalls[0].gas).toBe(21_000n);
 
-    const node2 = makeNode({ balanceWei: amountWei + 21_000n * gasPriceWei - 1n, gasPriceWei });
+    const node2 = makeNode({ balanceWei: amountWei + 21_000n * maxFeeWei - 1n, gasPriceWei });
     const wallet2 = makeWallet({ node: node2 });
     const { result: result2, lines: lines2 } = await run({ node: node2, wallet: wallet2 });
     expect(result2.exitCode).toBe(2);
@@ -548,7 +553,9 @@ describe("runAgent", () => {
     const wallet = makeWallet();
     const { result, lines } = await run({ mida, wallet });
     expect(result.exitCode).toBe(0);
-    expect(wallet.signCalls).toEqual([{ to: TO, value: 10_000_000_000_000_000n, nonce: 7, gas: 21000n, gasPrice: 1_000_000_000n }]);
+    expect(wallet.signCalls).toEqual([
+      { to: TO, value: 10_000_000_000_000_000n, nonce: 7, gas: 21000n, maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1_000_000_000n },
+    ]);
     expect(lines.some((line) => line.includes("0xnotmine"))).toBe(false);
     expect(mida.rememberCalls).toHaveLength(1);
   });
@@ -567,6 +574,22 @@ describe("runAgent", () => {
     // the signed bytes are on disk before any broadcast, so the next run can re-send them
     const journal = JSON.parse(fs.readFileSync(path.join(dir, ".trustlayer-journal.json"), "utf8"));
     expect(journal[BRIEF_ID]).toEqual({ hash: txHash, raw: wallet.sendRaws[0], nonce: 7 });
+  });
+
+  it("names the cause when the current base fee is above the journaled transaction's max fee", async () => {
+    // the broadcast bid 2x the going gas price, and the base fee has since
+    // risen above that cap — the journaled bytes cannot mine while that holds;
+    // "unknown" would be a lie about the reason
+    const node = makeNode({ gasPriceWei: 102n * 1_000_000_000n, baseFeeWei: 210n * 1_000_000_000n });
+    const wallet = makeWallet({ node, waitPlan: ["timeout"] });
+    const { result, lines } = await run({ node, wallet });
+    const txHash = keccak256(wallet.sendRaws[0]);
+    expect(result.exitCode).toBe(4);
+    expect(lines.at(-1)).toContain(txHash);
+    expect(lines.at(-1)).toContain("base fee");
+    expect(lines.at(-1)).toContain("max fee");
+    expect(lines.at(-1)).not.toContain("unknown");
+    expect(node.payments).toHaveLength(0);
   });
 
   it("exits 4 and writes no receipt when the tx reverted", async () => {

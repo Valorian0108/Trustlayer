@@ -1,5 +1,5 @@
 import { isMidaSdkError } from "@mida-context/sdk";
-import { formatEther, parseTransaction, zeroAddress } from "viem";
+import { formatEther, formatGwei, parseTransaction, zeroAddress } from "viem";
 import { monadTestnet } from "viem/chains";
 import { BriefError, parseBrief, pickBrief, shortId } from "./brief.js";
 import { alreadyDoneLine, decide, noDelegationLine, ownReceiptFor } from "./decide.js";
@@ -62,6 +62,18 @@ function receiptContent({ config, delegation, brief, hash, receipt, now }) {
   };
 }
 
+// The fee cap the signed bytes carry — EIP-1559 maxFeePerGas, or a legacy
+// gasPrice for bytes signed before this version existed. Undecodable bytes
+// mean no reliable answer.
+function journaledFeeCap(signed) {
+  try {
+    const tx = parseTransaction(signed.raw);
+    return tx.maxFeePerGas ?? tx.gasPrice ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function deadReasonText(dead) {
   if (dead.reason === "nonce-spent") return "its nonce was spent by a different transaction";
   if (dead.reason === "reverted") return "it reverted on-chain";
@@ -122,6 +134,22 @@ async function sendAndAwait({ config, chain, wallet, mida, log, now, journal, de
             : `chain: the nonce the journaled transaction used was already spent by a different transaction — tx ${signed.hash} can never land. No Mida receipt was written; the journal keeps the record, marked dead.`
         );
         return { exitCode: 4, outcome: "nonce-spent", txHash: signed.hash };
+      }
+    } catch {
+      // cannot tell — fall through to the unknown-outcome lines
+    }
+    // A journaled fee cap under the current base fee means the bytes cannot
+    // mine while that holds — say exactly that, not "unknown": they can still
+    // land if the base fee falls, and this agent never signs a fee-bumped
+    // replacement.
+    try {
+      const cap = journaledFeeCap(signed);
+      const baseFee = (await chain.getBlock())?.baseFeePerGas;
+      if (cap != null && baseFee != null && baseFee > cap) {
+        log(
+          `chain: tx ${signed.hash} cannot mine right now — the current base fee (${formatGwei(baseFee)} gwei) is above the max fee it was signed with (${formatGwei(cap)} gwei). The signed bytes stay journaled and can still land if the base fee falls; running again re-checks.`
+        );
+        return { exitCode: 4, outcome: "fee-too-low", txHash: signed.hash };
       }
     } catch {
       // cannot tell — fall through to the unknown-outcome lines
@@ -466,7 +494,7 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
       return { exitCode: 4, outcome: "chain-error" };
     }
 
-    const decision = decide({ delegation, brief, receipts, balanceWei, gasPriceWei, agentName: config.midaAgent });
+    const decision = decide({ delegation, brief, receipts, balanceWei, maxFeeWei: gasPriceWei * 2n, agentName: config.midaAgent });
     log(decision.line);
     if (decision.kind === "refuse") return { exitCode: 2, outcome: "refused" };
     if (decision.kind === "already-done") return { exitCode: 0, outcome: "already-done" };
@@ -481,7 +509,16 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
     let prepared;
     try {
       nonce = await chain.getTransactionCount({ address: config.agentAddress, blockTag: "pending" });
-      prepared = await wallet.signTransfer({ to: brief.to, value: brief.amountWei, nonce, gas: 21000n, gasPrice: gasPriceWei });
+      const block = await chain.getBlock();
+      const baseFeeWei = block?.baseFeePerGas ?? 0n;
+      prepared = await wallet.signTransfer({
+        to: brief.to,
+        value: brief.amountWei,
+        nonce,
+        gas: 21000n,
+        maxFeePerGas: gasPriceWei * 2n,
+        maxPriorityFeePerGas: gasPriceWei > baseFeeWei ? gasPriceWei - baseFeeWei : 0n,
+      });
     } catch (error) {
       log(`chain: could not prepare the transaction over ${rpcHost(config.rpcUrl)} (${errorClass(error)}). Nothing was sent.`);
       return { exitCode: 4, outcome: "chain-error" };

@@ -40,7 +40,7 @@ describe("decide", () => {
       brief: brief(),
       receipts: [],
       balanceWei: RICH,
-      gasPriceWei: GAS, agentName: AGENT_NAME,
+      maxFeeWei: GAS, agentName: AGENT_NAME,
     });
     expect(result).toEqual({
       kind: "refuse",
@@ -52,7 +52,7 @@ describe("decide", () => {
   it("reports already-done when a receipt names this brief id", () => {
     const b = brief();
     const receipt = receiptFor(b.id);
-    const result = decide({ delegation: delegation(), brief: b, receipts: [receipt], balanceWei: RICH, gasPriceWei: GAS, agentName: AGENT_NAME });
+    const result = decide({ delegation: delegation(), brief: b, receipts: [receipt], balanceWei: RICH, maxFeeWei: GAS, agentName: AGENT_NAME });
     expect(result.kind).toBe("already-done");
     expect(result.receipt).toBe(receipt);
     expect(result.line).toBe("already done: receipt 0xreceipt9… for brief 0xd9d35dc2… exists (tx 0xtxhash0001). Nothing was sent.");
@@ -64,7 +64,7 @@ describe("decide", () => {
       brief: brief(),
       receipts: [receiptFor("0xotherbrief")],
       balanceWei: RICH,
-      gasPriceWei: GAS, agentName: AGENT_NAME,
+      maxFeeWei: GAS, agentName: AGENT_NAME,
     });
     expect(result.kind).toBe("act");
   });
@@ -72,7 +72,7 @@ describe("decide", () => {
   it("does not match a receipt written under another agent's name", () => {
     const b = brief();
     const foreign = receiptFor(b.id, "0xnotmine", { author: { name: "some-other-agent", id: "0x" + "cd".repeat(32) } });
-    const result = decide({ delegation: delegation(), brief: b, receipts: [foreign], balanceWei: RICH, gasPriceWei: GAS, agentName: AGENT_NAME });
+    const result = decide({ delegation: delegation(), brief: b, receipts: [foreign], balanceWei: RICH, maxFeeWei: GAS, agentName: AGENT_NAME });
     expect(result.kind).toBe("act");
   });
 
@@ -82,14 +82,14 @@ describe("decide", () => {
       author: { name: null, id: "0x" + "0".repeat(64) },
       source: "USER_ASSERTED",
     });
-    const result = decide({ delegation: delegation(), brief: b, receipts: [ownerRecord], balanceWei: RICH, gasPriceWei: GAS, agentName: AGENT_NAME });
+    const result = decide({ delegation: delegation(), brief: b, receipts: [ownerRecord], balanceWei: RICH, maxFeeWei: GAS, agentName: AGENT_NAME });
     expect(result.kind).toBe("act");
   });
 
   it("does not match an agent record whose source is not AGENT_INFERRED", () => {
     const b = brief();
     const wrongSource = receiptFor(b.id, "0xws", { source: "USER_ASSERTED" });
-    const result = decide({ delegation: delegation(), brief: b, receipts: [wrongSource], balanceWei: RICH, gasPriceWei: GAS, agentName: AGENT_NAME });
+    const result = decide({ delegation: delegation(), brief: b, receipts: [wrongSource], balanceWei: RICH, maxFeeWei: GAS, agentName: AGENT_NAME });
     expect(result.kind).toBe("act");
   });
 
@@ -99,7 +99,7 @@ describe("decide", () => {
       brief: brief("50.000000000000000001"),
       receipts: [],
       balanceWei: RICH,
-      gasPriceWei: GAS, agentName: AGENT_NAME,
+      maxFeeWei: GAS, agentName: AGENT_NAME,
     });
     expect(result).toEqual({
       kind: "refuse",
@@ -109,18 +109,18 @@ describe("decide", () => {
   });
 
   it("allows exactly the cap", () => {
-    const result = decide({ delegation: delegation(1), brief: brief("50"), receipts: [], balanceWei: parseEther("100"), gasPriceWei: GAS, agentName: AGENT_NAME });
+    const result = decide({ delegation: delegation(1), brief: brief("50"), receipts: [], balanceWei: parseEther("100"), maxFeeWei: GAS, agentName: AGENT_NAME });
     expect(result.kind).toBe("act");
   });
 
   it("refuses 5.5 MON on Basic (cap 5)", () => {
-    const result = decide({ delegation: delegation(0), brief: brief("5.5"), receipts: [], balanceWei: RICH, gasPriceWei: GAS, agentName: AGENT_NAME });
+    const result = decide({ delegation: delegation(0), brief: brief("5.5"), receipts: [], balanceWei: RICH, maxFeeWei: GAS, agentName: AGENT_NAME });
     expect(result.code).toBe("above-cap");
     expect(result.line).toContain("Basic tier's auto-execute cap (5 MON)");
   });
 
   it("refuses 60 MON on Elevated — the cap is this agent's limit, not a verification step", () => {
-    const result = decide({ delegation: delegation(2), brief: brief("60"), receipts: [], balanceWei: RICH, gasPriceWei: GAS, agentName: AGENT_NAME });
+    const result = decide({ delegation: delegation(2), brief: brief("60"), receipts: [], balanceWei: RICH, maxFeeWei: GAS, agentName: AGENT_NAME });
     expect(result.code).toBe("above-cap");
     expect(result.line).toContain("Elevated tier's auto-execute cap (50 MON)");
     // TrustLayer blocks over-cap Basic/Routine actions in its app — the line must
@@ -128,9 +128,9 @@ describe("decide", () => {
     expect(result.line).not.toContain("stronger-verification");
   });
 
-  it("refuses when the balance cannot cover amount plus 21000 gas", () => {
+  it("refuses when the balance cannot cover amount plus 21000 max fee", () => {
     const balanceWei = parseEther("0.01") + 21000n * GAS - 1n;
-    const result = decide({ delegation: delegation(), brief: brief("0.01"), receipts: [], balanceWei, gasPriceWei: GAS, agentName: AGENT_NAME });
+    const result = decide({ delegation: delegation(), brief: brief("0.01"), receipts: [], balanceWei, maxFeeWei: GAS, agentName: AGENT_NAME });
     expect(result).toEqual({
       kind: "refuse",
       code: "insufficient-funds",
@@ -139,7 +139,7 @@ describe("decide", () => {
   });
 
   it("decides to act on the happy path", () => {
-    const result = decide({ delegation: delegation(), brief: brief("0.01"), receipts: [], balanceWei: RICH, gasPriceWei: GAS, agentName: AGENT_NAME });
+    const result = decide({ delegation: delegation(), brief: brief("0.01"), receipts: [], balanceWei: RICH, maxFeeWei: GAS, agentName: AGENT_NAME });
     expect(result).toEqual({
       kind: "act",
       line: "decision: 0.01 MON is within the Routine auto-execute cap (50 MON). Sending.",
