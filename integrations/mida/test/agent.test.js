@@ -184,6 +184,46 @@ describe("runAgent", () => {
     }
   );
 
+  it("exits 3 and sends nothing when the brief list comes back partial", async () => {
+    const mida = makeMida({ factsPages: [{ items: [], cursor: null, partial: true }] });
+    const wallet = makeWallet();
+    const { result, lines } = await run({ mida, wallet });
+    expect(result.exitCode).toBe(3);
+    expect(lines).toEqual([
+      `trustlayer: delegation #29 from 0x1234…abcd to ${SHORT_AGENT} — tier Routine ($50), expires ${EXPIRES_ISO}`,
+      "mida: the record list came back incomplete (the store has not verified its newest rows yet). Nothing was sent. Run again in a minute.",
+    ]);
+    expect(wallet.sends).toHaveLength(0);
+    expect(mida.rememberCalls).toHaveLength(0);
+  });
+
+  it("exits 3 and sends nothing when the receipt list is partial and omits the receipt", async () => {
+    // the receipt that would suppress this brief can be exactly the row a partial list omits
+    const mida = makeMida({ receiptPages: [{ items: [], cursor: null, partial: true }] });
+    const wallet = makeWallet();
+    const { result, lines } = await run({ mida, wallet });
+    expect(result.exitCode).toBe(3);
+    expect(lines.at(-1)).toBe(
+      "mida: the record list came back incomplete (the store has not verified its newest rows yet). Nothing was sent. Run again in a minute."
+    );
+    expect(wallet.sends).toHaveLength(0);
+    expect(mida.rememberCalls).toHaveLength(0);
+  });
+
+  it("stops on a partial page even when an earlier page looked complete", async () => {
+    const mida = makeMida({
+      receiptPages: [
+        { items: [receiptItem("0xrother", "0xotherbrief")], cursor: "p2" },
+        { items: [], cursor: null, partial: true },
+      ],
+    });
+    const wallet = makeWallet();
+    const { result } = await run({ mida, wallet });
+    expect(result.exitCode).toBe(3);
+    expect(wallet.sends).toHaveLength(0);
+    expect(mida.rememberCalls).toHaveLength(0);
+  });
+
   it("exits 2 with the R3 line when no brief exists", async () => {
     const mida = makeMida({ factsPages: [{ items: [briefFact("0xother", "remember to water plants")], cursor: null }] });
     const wallet = makeWallet();

@@ -10,11 +10,22 @@ const BRIEF_PAGE_BYTES = 16_384;
 const RECEIPT_PAGE_BYTES = 65_536;
 const EXPLORER_TX = "https://testnet.monadscan.com/tx/";
 
+export class PartialReadError extends Error {
+  constructor() {
+    super("the record list came back incomplete");
+    this.name = "PartialReadError";
+  }
+}
+
+const PARTIAL_READ_LINE =
+  "mida: the record list came back incomplete (the store has not verified its newest rows yet). Nothing was sent. Run again in a minute.";
+
 async function readAll(mida, namespace, limit) {
   const items = [];
   let cursor;
   do {
     const page = await mida.context(cursor ? { namespace, limit, cursor } : { namespace, limit });
+    if (page.partial === true) throw new PartialReadError();
     items.push(...page.items);
     cursor = page.cursor;
   } while (cursor);
@@ -53,6 +64,10 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
   try {
     facts = await readAll(mida, BRIEF_NAMESPACE, BRIEF_PAGE_BYTES);
   } catch (error) {
+    if (error instanceof PartialReadError) {
+      log(PARTIAL_READ_LINE);
+      return { exitCode: 3, outcome: "partial-read" };
+    }
     if (isMidaSdkError(error)) {
       log(midaRefusedLine(error));
       return { exitCode: 3, outcome: "refused" };
@@ -84,6 +99,10 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
   try {
     receipts = await readAll(mida, RECEIPT_NAMESPACE, RECEIPT_PAGE_BYTES);
   } catch (error) {
+    if (error instanceof PartialReadError) {
+      log(PARTIAL_READ_LINE);
+      return { exitCode: 3, outcome: "partial-read" };
+    }
     if (isMidaSdkError(error)) {
       log(midaRefusedLine(error));
       return { exitCode: 3, outcome: "refused" };
