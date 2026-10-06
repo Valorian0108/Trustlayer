@@ -3,7 +3,7 @@ import { formatEther, formatGwei, keccak256, parseTransaction, recoverTransactio
 import { monadTestnet } from "viem/chains";
 import { BriefError, parseBrief, pickBrief, shortId } from "./brief.js";
 import { alreadyDoneLine, decide, noDelegationLine, ownReceiptFor } from "./decide.js";
-import { acquireLock, JOURNAL_FILE, LockHeldError, markJournalDead, markJournalReceipted, readJournal, writeJournalEntry } from "./runfiles.js";
+import { acquireLock, JOURNAL_FILE, LOCK_FILE, LockHeldError, markJournalDead, markJournalReceipted, readJournal, writeJournalEntry } from "./runfiles.js";
 import { autoCapMon, ChainError, errorClass, readDelegation, rpcHost, shortAddr } from "./trustlayer.js";
 
 const BRIEF_NAMESPACE = "preferences.communication";
@@ -336,7 +336,9 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
     lock = acquireLock(config.projectDir);
   } catch (error) {
     if (error instanceof LockHeldError) {
-      log(`mida: another run is in progress (pid ${error.pid}). Nothing was sent.`);
+      log(
+        `mida: another run is in progress (pid ${error.pid}, lock file ${LOCK_FILE}). Check the pid is really running (e.g. ps -p ${error.pid}); remove the lock file only if that process is gone. Nothing was sent.`
+      );
       return { exitCode: 1, outcome: "locked" };
     }
     throw error;

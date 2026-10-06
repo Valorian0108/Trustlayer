@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,6 +6,7 @@ import { keccak256, parseEther, parseTransaction } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { MidaSdkError } from "@mida-context/sdk";
 import { runAgent } from "../src/agent.js";
+import { acquireLock, LockHeldError } from "../src/runfiles.js";
 
 const REGISTRY = "0x088bc310c841fA5ed5b28F37050c3B419572b70d";
 const OWNER = "0x1234567890abcdef1234567890abcdef1234abcd";
@@ -868,7 +869,11 @@ describe("runAgent", () => {
     ]);
     expect([a.exitCode, b.exitCode].sort()).toEqual([0, 1]);
     const loser = a.exitCode === 1 ? linesA : linesB;
-    expect(loser.at(-1)).toBe(`mida: another run is in progress (pid ${process.pid}). Nothing was sent.`);
+    expect(loser.at(-1)).toContain("another run is in progress");
+    expect(loser.at(-1)).toContain(`pid ${process.pid}`);
+    expect(loser.at(-1)).toContain(".trustlayer-run.lock");
+    expect(loser.at(-1)).toContain(`ps -p ${process.pid}`);
+    expect(loser.at(-1)).toContain("Nothing was sent.");
     expect(wallet.sendRaws).toHaveLength(1);
   });
 
@@ -877,7 +882,8 @@ describe("runAgent", () => {
     fs.writeFileSync(path.join(dir, ".trustlayer-run.lock"), "999999\n");
     const { result } = await run({ projectDir: dir });
     expect(result.exitCode).toBe(0);
-    expect(fs.existsSync(path.join(dir, ".trustlayer-run.lock"))).toBe(false);
+    // the lock is released and the renamed-aside stale file is cleaned up
+    expect(fs.readdirSync(dir).filter((f) => f.startsWith(".trustlayer-run.lock"))).toEqual([]);
   });
 
   it("exits 4 without a wrong-hash receipt when the network replaced the transaction", async () => {
@@ -954,5 +960,84 @@ describe("runAgent", () => {
       expect(line).not.toContain(AGENT_KEY.slice(2));
       expect(line).not.toContain("agentPrivateKey");
     }
+  });
+});
+
+describe("acquireLock", () => {
+  it("lets exactly one of two racing runs take over a stale lock", () => {
+    // probe 5a: both runs read the same dead pid — on the old unlink-then-create
+    // scheme both could win. The stale file is renamed aside before retrying,
+    // so only the run whose rename wins ever reaches the second link.
+    const dir = tmpDir();
+    const file = path.join(dir, ".trustlayer-run.lock");
+    fs.writeFileSync(file, "999999\n");
+    const real = fs.readFileSync;
+    let injected = false;
+    let lockB;
+    let errB;
+    vi.spyOn(fs, "readFileSync").mockImplementation((p, ...rest) => {
+      const out = real(p, ...rest);
+      if (!injected && String(p) === file) {
+        injected = true;
+        try {
+          lockB = acquireLock(dir);
+        } catch (e) {
+          errB = e;
+        }
+      }
+      return out;
+    });
+    let lockA;
+    let errA;
+    try {
+      lockA = acquireLock(dir);
+    } catch (e) {
+      errA = e;
+    } finally {
+      vi.restoreAllMocks();
+    }
+    expect([lockA, lockB].filter(Boolean)).toHaveLength(1);
+    for (const err of [errA, errB]) expect(err == null || err instanceof LockHeldError).toBe(true);
+    (lockA ?? lockB).release();
+  });
+
+  it("never exposes an empty lock file, so a second run mid-create loses", () => {
+    // probe 5b: the pid used to be written after the lock existed empty — a run
+    // in that window saw no pid and stole a live lock. Now the pid is written
+    // to a temp file and linked into place whole, so the later link loses.
+    const dir = tmpDir();
+    const realWrite = fs.writeFileSync;
+    let injected = false;
+    let lockB;
+    let errB;
+    vi.spyOn(fs, "writeFileSync").mockImplementation((fd, data, ...rest) => {
+      if (!injected && typeof fd === "number") {
+        injected = true;
+        try {
+          lockB = acquireLock(dir);
+        } catch (e) {
+          errB = e;
+        }
+      }
+      return realWrite(fd, data, ...rest);
+    });
+    let lockA;
+    let errA;
+    try {
+      lockA = acquireLock(dir);
+    } catch (e) {
+      errA = e;
+    } finally {
+      vi.restoreAllMocks();
+    }
+    expect([lockA, lockB].filter(Boolean)).toHaveLength(1);
+    for (const err of [errA, errB]) expect(err == null || err instanceof LockHeldError).toBe(true);
+    (lockA ?? lockB).release();
+  });
+
+  it("a live pid keeps the lock held", () => {
+    const dir = tmpDir();
+    fs.writeFileSync(path.join(dir, ".trustlayer-run.lock"), `${process.pid}\n`);
+    expect(() => acquireLock(dir)).toThrow(LockHeldError);
   });
 });

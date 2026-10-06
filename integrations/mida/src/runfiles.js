@@ -6,7 +6,7 @@ import path from "node:path";
 // transaction before it is broadcast so a crashed or cut-off run can re-send
 // the exact same bytes — the same nonce means it can never pay twice.
 
-const LOCK_FILE = ".trustlayer-run.lock";
+export const LOCK_FILE = ".trustlayer-run.lock";
 export const JOURNAL_FILE = ".trustlayer-journal.json";
 
 export class LockHeldError extends Error {
@@ -39,13 +39,36 @@ function readLockPid(file) {
 export function acquireLock(dir) {
   const file = path.join(dir, LOCK_FILE);
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    // the pid goes into a temp file first and link() makes it the lock in one
+    // atomic step — the lock file only ever exists complete, never empty, so
+    // an unreadable or pid-less one is genuinely stale
+    const tmp = `${file}.${process.pid}.${attempt}.tmp`;
     try {
-      const fd = fs.openSync(file, "wx"); // O_EXCL — fails if the file exists
+      const fd = fs.openSync(tmp, "wx", 0o600);
       try {
         fs.writeFileSync(fd, `${process.pid}\n`);
+        fs.fsyncSync(fd);
       } finally {
         fs.closeSync(fd);
       }
+    } catch {
+      continue; // a leftover temp file — try the next name
+    }
+    let acquired = false;
+    let linkError = null;
+    try {
+      fs.linkSync(tmp, file); // atomic: EEXIST while any lock file is there
+      acquired = true;
+    } catch (error) {
+      linkError = error;
+    }
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      // already moved by link() or never created
+    }
+    if (linkError && linkError.code !== "EEXIST") throw linkError;
+    if (acquired) {
       let released = false;
       return {
         release() {
@@ -58,19 +81,40 @@ export function acquireLock(dir) {
           }
         },
       };
-    } catch (error) {
-      if (error.code !== "EEXIST") throw error;
-      const pid = readLockPid(file);
-      if (pid !== null && pidAlive(pid)) throw new LockHeldError(pid);
-      // the holder is dead or the file is unreadable — take the lock over
-      try {
-        fs.unlinkSync(file);
-      } catch (unlinkError) {
-        if (unlinkError.code !== "ENOENT") throw unlinkError;
-      }
     }
+    // the lock exists: held by a live pid, or stale
+    const pid = readLockPid(file);
+    if (pid !== null && pidAlive(pid)) throw new LockHeldError(pid);
+    // Move the stale file out of the way under a name only this process uses —
+    // the rename is the atomic claim, so two runs cannot both get here — then
+    // check what was actually moved: if a live run beat us to the lock between
+    // our read and our rename, its lock goes straight back and we back off.
+    const aside = `${file}.stale-${process.pid}-${attempt}`;
+    let movedPid = null;
+    try {
+      fs.renameSync(file, aside);
+      movedPid = readLockPid(aside);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      continue; // the file vanished between our read and our rename — retry
+    }
+    if (movedPid !== null && pidAlive(movedPid)) {
+      try {
+        fs.linkSync(aside, file);
+        fs.unlinkSync(aside);
+      } catch {
+        // a third party re-locked in the gap; the moved file stays as `aside`
+      }
+      throw new LockHeldError(movedPid);
+    }
+    try {
+      fs.unlinkSync(aside);
+    } catch {
+      // best effort — it held only a dead pid
+    }
+    // loop: retry the atomic link — whoever lands it holds the lock
   }
-  // someone else won the race between our unlink and our create
+  // someone else won the takeover — or re-locked in the gap
   throw new LockHeldError(readLockPid(file) ?? -1);
 }
 

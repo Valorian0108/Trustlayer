@@ -72,6 +72,11 @@ a second run cannot overlap the first; and the transfer is signed locally and jo
 broadcast — if a run cannot tell whether its send landed, the next run re-sends the identical signed bytes
 (same nonce, same hash), which can never become a second payment, and then writes only the missing receipt.
 
+While a run is in flight it holds `.trustlayer-run.lock` in the project folder; a second run prints
+`mida: another run is in progress (pid …)` and exits 1. If a run died and left the file behind, check the
+pid it names (`ps -p <pid>`) and remove the lock file only when that process is really gone — taking over a
+live run's lock would let two overlapping runs pay two different briefs.
+
 ## The two revocations, and what each stops
 
 - **Revoke the TrustLayer delegation** — `cast send 0x088bc310c841fA5ed5b28F37050c3B419572b70d
