@@ -22,13 +22,14 @@ function isOwnerWritten(item) {
 }
 
 // The candidate is the newest owner-written record whose text mentions
-// "trustlayer" — chosen without parsing, so a malformed brief the owner meant
-// to write still wins over older valid ones and is refused instead of skipped.
+// "trustlayer" in any case — chosen without parsing, so a malformed brief the
+// owner meant to write still wins over older valid ones and is refused instead
+// of skipped.
 export function pickBrief(items) {
   for (const item of items) {
     if (!isOwnerWritten(item)) continue;
     const text = item?.content?.text;
-    if (typeof text === "string" && text.includes("trustlayer")) return item;
+    if (typeof text === "string" && /trustlayer/i.test(text)) return item;
   }
   return null;
 }

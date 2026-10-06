@@ -39,6 +39,16 @@ describe("pickBrief", () => {
     expect(pickBrief([broken, older]).id).toBe("0xbroken");
   });
 
+  it("matches trustlayer case-insensitively, so a 'TrustLayer' brief is not skipped for an older one", () => {
+    // the marker key itself stays strict: the newest record is picked and then
+    // refused by parseBrief — never silently passed over for an older brief
+    const mixedCase = item("0xmixed", `{"TrustLayer":1,"action":"transfer","to":"${TO}","amountMon":"0.02"}`);
+    const older = item("0xolder", `{"trustlayer":1,"action":"transfer","to":"${TO}","amountMon":"0.01"}`);
+    const picked = pickBrief([mixedCase, older]);
+    expect(picked.id).toBe("0xmixed");
+    expect(() => parseBrief(picked)).toThrow(BriefError);
+  });
+
   it("skips records whose text never mentions trustlayer", () => {
     const items = [
       item("0xa", "plain words"),
