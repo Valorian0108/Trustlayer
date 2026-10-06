@@ -1,6 +1,6 @@
 # Trust Layer
 
-      <img src="assets/logo.webp" alt="Trust Layer Logo" width="300" height="150">
+   <img src="assets/logo.webp" alt="Trust Layer Logo" width="300" height="150">
 
 <p align="center">
   <img src="https://img.shields.io/badge/Monad-testnet%2010143-836EF9?style=flat-square&labelColor=14130F" alt="Monad testnet, chain 10143">
