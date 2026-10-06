@@ -50,8 +50,20 @@ function briefFact(id = BRIEF_ID, json = BRIEF_JSON, overrides = {}) {
   };
 }
 
-function receiptItem(id, briefRecordId, hash = TX_HASH) {
-  return { id, content: { trustlayerReceipt: 1, briefRecordId, tx: { hash } } };
+// the shape the SDK returns for a record an agent wrote: source AGENT_INFERRED,
+// author {name, id} with a non-zero id resolved by the daemon
+function receiptItem(id, briefRecordId, hash = TX_HASH, overrides = {}) {
+  return {
+    id,
+    namespace: "projects.current",
+    kind: "EPISODE",
+    content: { trustlayerReceipt: 1, briefRecordId, tx: { hash } },
+    author: { name: "trustlayer-agent", id: OTHER_AUTHOR_ID },
+    source: "AGENT_INFERRED",
+    writtenAt: NOW_ISO,
+    state: "anchored",
+    ...overrides,
+  };
 }
 
 function makeChain({ delegation = [true, 29n, 1], details, balanceWei = parseEther("1"), gasPriceWei = 1_000_000_000n } = {}) {
@@ -266,6 +278,18 @@ describe("runAgent", () => {
     expect(lines.at(-1)).toBe(`already done: receipt 0xreceipt9… for brief 0xd9d35dc2… exists (tx ${TX_HASH}). Nothing was sent.`);
     expect(wallet.sends).toHaveLength(0);
     expect(mida.rememberCalls).toHaveLength(0);
+  });
+
+  it("does not suppress the transfer when a receipt for the brief was written by another author", async () => {
+    // someone else's record claims this brief was paid with tx 0xnotmine — it must not count
+    const foreign = receiptItem("0xforeign", BRIEF_ID, "0xnotmine", { author: { name: "some-other-agent", id: "0x" + "ef".repeat(32) } });
+    const mida = makeMida({ receiptPages: [{ items: [foreign], cursor: null }] });
+    const wallet = makeWallet();
+    const { result, lines } = await run({ mida, wallet });
+    expect(result.exitCode).toBe(0);
+    expect(wallet.sends).toEqual([{ to: TO, value: 10_000_000_000_000_000n }]);
+    expect(lines.some((line) => line.includes("0xnotmine"))).toBe(false);
+    expect(mida.rememberCalls).toHaveLength(1);
   });
 
   it("exits 4 and writes no receipt when the tx is not confirmed in 60 s", async () => {

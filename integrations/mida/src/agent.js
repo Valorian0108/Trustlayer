@@ -120,7 +120,7 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
     return { exitCode: 4, outcome: "chain-error" };
   }
 
-  const decision = decide({ delegation, brief, receipts, balanceWei, gasPriceWei });
+  const decision = decide({ delegation, brief, receipts, balanceWei, gasPriceWei, agentName: config.midaAgent });
   log(decision.line);
   if (decision.kind === "refuse") return { exitCode: 2, outcome: "refused" };
   if (decision.kind === "already-done") return { exitCode: 0, outcome: "already-done" };

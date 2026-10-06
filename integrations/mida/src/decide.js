@@ -1,14 +1,30 @@
 import { formatEther, parseEther } from "viem";
 import { autoCapMon, shortAddr, tierInfo } from "./trustlayer.js";
-import { shortId } from "./brief.js";
+import { OWNER_AUTHOR_ID, shortId } from "./brief.js";
 
 const TRANSFER_GAS_LIMIT = 21000n;
+
+// A receipt counts only if the chain says this agent wrote it: source
+// AGENT_INFERRED, a non-zero author id, and this agent's name. The SDK's public
+// facade exposes the agent's name but not its author id, so the name is the
+// identity compared here.
+export function ownReceiptFor(receipts, briefId, agentName) {
+  return receipts.find(
+    (item) =>
+      item?.content?.trustlayerReceipt === 1 &&
+      item?.content?.briefRecordId === briefId &&
+      item?.source === "AGENT_INFERRED" &&
+      item?.author?.id !== undefined &&
+      item?.author?.id !== OWNER_AUTHOR_ID &&
+      item?.author?.name === agentName
+  );
+}
 
 export function noDelegationLine({ owner, agent }) {
   return `trustlayer: no valid delegation from ${shortAddr(owner)} to ${shortAddr(agent)} on the DelegationRegistry (revoked, expired or never created). Nothing was sent.`;
 }
 
-export function decide({ delegation, brief, receipts, balanceWei, gasPriceWei }) {
+export function decide({ delegation, brief, receipts, balanceWei, gasPriceWei, agentName }) {
   if (!delegation.valid) {
     return {
       kind: "refuse",
@@ -17,9 +33,7 @@ export function decide({ delegation, brief, receipts, balanceWei, gasPriceWei })
     };
   }
 
-  const receipt = receipts.find(
-    (item) => item?.content?.trustlayerReceipt === 1 && item?.content?.briefRecordId === brief.id
-  );
+  const receipt = ownReceiptFor(receipts, brief.id, agentName);
   if (receipt) {
     return {
       kind: "already-done",
