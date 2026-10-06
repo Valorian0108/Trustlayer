@@ -1,6 +1,6 @@
 import { isMidaSdkError } from "@mida-context/sdk";
 import { monadTestnet } from "viem/chains";
-import { BriefError, pickBrief, shortId, validateBrief } from "./brief.js";
+import { BriefError, parseBrief, pickBrief, shortId } from "./brief.js";
 import { decide, noDelegationLine } from "./decide.js";
 import { autoCapMon, ChainError, errorClass, readDelegation, rpcHost, shortAddr } from "./trustlayer.js";
 
@@ -83,7 +83,7 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
   }
   let brief;
   try {
-    brief = { id: picked.id, author: picked.author, assertedAt: picked.assertedAt, ...validateBrief(picked) };
+    brief = parseBrief(picked);
   } catch (error) {
     if (error instanceof BriefError) {
       log(error.message);

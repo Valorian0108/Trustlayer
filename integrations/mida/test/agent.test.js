@@ -243,6 +243,19 @@ describe("runAgent", () => {
     expect(mida.rememberCalls).toHaveLength(0);
   });
 
+  it("refuses when the newest owner brief is malformed instead of paying an older one", async () => {
+    // the newest owner record decides — a broken one must never silently unblock the previous brief
+    const broken = briefFact("0xbroken1", `{trustlayer:1,"action":"transfer","to":"${TO}","amountMon":"5"}`);
+    const older = briefFact("0xolder99", BRIEF_JSON);
+    const mida = makeMida({ factsPages: [{ items: [broken, older], cursor: null }] });
+    const wallet = makeWallet();
+    const { result, lines } = await run({ mida, wallet });
+    expect(result.exitCode).toBe(2);
+    expect(lines.at(-1)).toBe("brief 0xbroken1…: the text is not valid JSON. Nothing was sent.");
+    expect(wallet.sends).toHaveLength(0);
+    expect(mida.rememberCalls).toHaveLength(0);
+  });
+
   it("ignores a brief-shaped record written by an agent and refuses as no-brief", async () => {
     const forged = briefFact("0xforged", `{"trustlayer":1,"action":"transfer","to":"${TO}","amountMon":"49"}`, {
       author: { name: "trustlayer-agent", id: OTHER_AUTHOR_ID },

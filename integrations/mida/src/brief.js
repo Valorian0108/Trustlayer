@@ -21,33 +21,40 @@ function isOwnerWritten(item) {
   return item?.author?.id === OWNER_AUTHOR_ID && item?.source === "USER_ASSERTED";
 }
 
+// The candidate is the newest owner-written record whose text mentions
+// "trustlayer" — chosen without parsing, so a malformed brief the owner meant
+// to write still wins over older valid ones and is refused instead of skipped.
 export function pickBrief(items) {
   for (const item of items) {
     if (!isOwnerWritten(item)) continue;
     const text = item?.content?.text;
-    if (typeof text !== "string") continue;
-    let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      continue;
-    }
-    if (parsed && parsed.trustlayer === 1) {
-      return {
-        // id, author and assertedAt come from the chain record; only the
-        // allow-listed fields are taken from the owner-written text
-        id: item.id,
-        author: item.author ?? null,
-        assertedAt: item.content?.assertedAt ?? item.writtenAt ?? null,
-        trustlayer: parsed.trustlayer,
-        action: parsed.action,
-        to: parsed.to,
-        amountMon: parsed.amountMon,
-        memo: parsed.memo,
-      };
-    }
+    if (typeof text === "string" && text.includes("trustlayer")) return item;
   }
   return null;
+}
+
+export function parseBrief(item) {
+  let parsed;
+  try {
+    parsed = JSON.parse(item.content.text);
+  } catch {
+    throw new BriefError(`brief ${shortId(item.id)}: the text is not valid JSON. Nothing was sent.`);
+  }
+  if (!parsed || typeof parsed !== "object" || parsed.trustlayer !== 1) {
+    throw invalidBrief(item.id, "trustlayer", "the marker must be the number 1");
+  }
+  const brief = {
+    // id, author and assertedAt come from the chain record; only the
+    // allow-listed fields are taken from the owner-written text
+    id: item.id,
+    author: item.author ?? null,
+    assertedAt: item.content?.assertedAt ?? item.writtenAt ?? null,
+    action: parsed.action,
+    to: parsed.to,
+    amountMon: parsed.amountMon,
+    memo: parsed.memo,
+  };
+  return { id: brief.id, author: brief.author, assertedAt: brief.assertedAt, ...validateBrief(brief) };
 }
 
 function invalidBrief(id, field, why) {
