@@ -3,5 +3,5 @@
 !.env.example
 node_modules/
 .mida/
-.trustlayer-run.lock
-.trustlayer-journal.json
+.trustlayer-run.lock*
+.trustlayer-journal*
