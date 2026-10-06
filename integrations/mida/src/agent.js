@@ -33,8 +33,13 @@ async function readAll(mida, namespace, limit) {
   return items;
 }
 
+// Only a service that answered can refuse — the two *-unavailable codes mean
+// the daemon never spoke, so the line must say unavailable, not refused.
+const UNAVAILABLE_CODES = new Set(["service-unavailable", "transport-unavailable"]);
+
 function midaRefusedLine(error) {
-  return `mida: refused (${error.code}) — ${error.message.replace(/\.$/, "")}. Nothing was sent.`;
+  const what = UNAVAILABLE_CODES.has(error.code) ? "unavailable" : "refused";
+  return `mida: ${what} (${error.code}) — ${error.message.replace(/\.$/, "")}. Nothing was sent.`;
 }
 
 // Broadcast the signed bytes, then wait for the journaled hash. A send error
@@ -221,10 +226,6 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
       }
       throw error;
     }
-    log(
-      `mida: ${config.midaAgent} approved; brief ${shortId(brief.id)} (${brief.author?.name ?? "owner"}, ${brief.assertedAt ?? "unknown time"}): transfer ${brief.amountMon} MON to ${shortAddr(brief.to)}`
-    );
-
     // The destination must be a plain wallet: not the zero address, not this
     // agent paying itself, and not a contract — the brief promises a transfer,
     // and a contract destination could run code instead.
@@ -259,6 +260,11 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
       }
       throw error;
     }
+    // Printed only once both namespace reads succeeded — "approved" before a
+    // read that then refuses would make the transcript contradict itself.
+    log(
+      `mida: ${config.midaAgent} approved; brief ${shortId(brief.id)} (${brief.author?.name ?? "owner"}, ${brief.assertedAt ?? "unknown time"}): transfer ${brief.amountMon} MON to ${shortAddr(brief.to)}`
+    );
 
     // A receipt this agent wrote for this brief settles it — whatever an old
     // journal entry says, the payment and the record both exist.

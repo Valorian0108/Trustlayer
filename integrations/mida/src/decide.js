@@ -51,7 +51,7 @@ export function decide({ delegation, brief, receipts, balanceWei, gasPriceWei, a
     return {
       kind: "refuse",
       code: "above-cap",
-      line: `trustlayer: ${brief.amountMon} MON is above the ${tierName} auto-execute cap (${capMon} MON). TrustLayer's stronger-verification step is not part of this integration. Nothing was sent.`,
+      line: `trustlayer: ${brief.amountMon} MON is above the ${tierName} tier's auto-execute cap (${capMon} MON). This agent does not act above the cap. Nothing was sent.`,
     };
   }
 

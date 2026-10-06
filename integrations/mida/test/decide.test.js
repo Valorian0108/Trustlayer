@@ -104,7 +104,7 @@ describe("decide", () => {
     expect(result).toEqual({
       kind: "refuse",
       code: "above-cap",
-      line: "trustlayer: 50.000000000000000001 MON is above the Routine auto-execute cap (50 MON). TrustLayer's stronger-verification step is not part of this integration. Nothing was sent.",
+      line: "trustlayer: 50.000000000000000001 MON is above the Routine tier's auto-execute cap (50 MON). This agent does not act above the cap. Nothing was sent.",
     });
   });
 
@@ -116,13 +116,16 @@ describe("decide", () => {
   it("refuses 5.5 MON on Basic (cap 5)", () => {
     const result = decide({ delegation: delegation(0), brief: brief("5.5"), receipts: [], balanceWei: RICH, gasPriceWei: GAS, agentName: AGENT_NAME });
     expect(result.code).toBe("above-cap");
-    expect(result.line).toContain("Basic auto-execute cap (5 MON)");
+    expect(result.line).toContain("Basic tier's auto-execute cap (5 MON)");
   });
 
-  it("refuses 60 MON on Elevated (cap 50, stronger verification is out of scope)", () => {
+  it("refuses 60 MON on Elevated — the cap is this agent's limit, not a verification step", () => {
     const result = decide({ delegation: delegation(2), brief: brief("60"), receipts: [], balanceWei: RICH, gasPriceWei: GAS, agentName: AGENT_NAME });
     expect(result.code).toBe("above-cap");
-    expect(result.line).toContain("Elevated auto-execute cap (50 MON)");
+    expect(result.line).toContain("Elevated tier's auto-execute cap (50 MON)");
+    // TrustLayer blocks over-cap Basic/Routine actions in its app — the line must
+    // not imply a stronger-verification step exists for this agent to skip
+    expect(result.line).not.toContain("stronger-verification");
   });
 
   it("refuses when the balance cannot cover amount plus 21000 gas", () => {

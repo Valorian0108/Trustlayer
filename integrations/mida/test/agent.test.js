@@ -268,7 +268,7 @@ describe("runAgent", () => {
     expect(wallet.sendRaws).toHaveLength(0);
   });
 
-  it.each(["revoked", "not-approved", "service-unavailable"])(
+  it.each(["revoked", "not-approved"])(
     "exits 3 and sends nothing when context() refuses with %s",
     async (code) => {
       const mida = makeMida({ contextError: new MidaSdkError(code, `the service said ${code}`) });
@@ -281,6 +281,19 @@ describe("runAgent", () => {
       ]);
       expect(wallet.sendRaws).toHaveLength(0);
       expect(mida.rememberCalls).toHaveLength(0);
+    }
+  );
+
+  it.each(["service-unavailable", "transport-unavailable"])(
+    "exits 3 saying unavailable, not refused, when context() fails with %s",
+    async (code) => {
+      // the service not answering is not a refusal — the line must not claim one
+      const mida = makeMida({ contextError: new MidaSdkError(code, `the service said ${code}`) });
+      const wallet = makeWallet();
+      const { result, lines } = await run({ mida, wallet });
+      expect(result.exitCode).toBe(3);
+      expect(lines.at(-1)).toBe(`mida: unavailable (${code}) — the service said ${code}. Nothing was sent.`);
+      expect(wallet.sendRaws).toHaveLength(0);
     }
   );
 
@@ -306,6 +319,8 @@ describe("runAgent", () => {
     expect(lines.at(-1)).toBe(
       "mida: the record list came back incomplete (the store has not verified its newest rows yet). Nothing was sent. Run again in a minute."
     );
+    // the receipt read can still refuse — the "approved; brief" line must not have printed first
+    expect(lines.some((line) => line.includes("approved; brief"))).toBe(false);
     expect(wallet.sendRaws).toHaveLength(0);
     expect(mida.rememberCalls).toHaveLength(0);
   });
