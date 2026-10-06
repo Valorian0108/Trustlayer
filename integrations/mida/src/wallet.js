@@ -31,7 +31,7 @@ export function createWallet({ agentPrivateKey, rpcUrl }) {
       return { raw, hash: keccak256(raw) };
     },
     sendRawTransaction: ({ serializedTransaction }) => publicClient.sendRawTransaction({ serializedTransaction }),
-    waitForTransactionReceipt: ({ hash }) =>
-      publicClient.waitForTransactionReceipt({ hash, timeout: 60_000, pollingInterval: 1_000 }),
+    waitForTransactionReceipt: ({ hash, timeout = 60_000 }) =>
+      publicClient.waitForTransactionReceipt({ hash, timeout, pollingInterval: 1_000 }),
   };
 }

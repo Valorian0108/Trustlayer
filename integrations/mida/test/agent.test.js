@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { keccak256, parseEther, parseTransaction } from "viem";
+import { keccak256, parseEther, parseTransaction, TransactionReceiptNotFoundError } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { MidaSdkError } from "@mida-context/sdk";
 import { runAgent } from "../src/agent.js";
@@ -980,6 +980,235 @@ describe("runAgent", () => {
       expect(line).not.toContain(AGENT_KEY.slice(2));
       expect(line).not.toContain("agentPrivateKey");
     }
+  });
+});
+
+// The review-3 chain model: mining advances the nonce, and a missing receipt
+// throws viem's real TransactionReceiptNotFoundError. `afterReceiptMiss` runs
+// right after the node answers "no receipt" — it models a block landing during
+// the next round trip, the exact gap NEW-1 lives in.
+describe("review 3: our own mined transaction can never read as 'a different transaction'", () => {
+  const BRIEF_A = "0x" + "a1".repeat(32);
+  const BRIEF_B = "0x" + "b2".repeat(32);
+  const JOURNAL = ".trustlayer-journal.json";
+  const httpErr = () => Object.assign(new Error("429"), { name: "HttpRequestError" });
+  const briefJson = (amount) =>
+    `{"trustlayer":1,"action":"transfer","to":"${TO}","amountMon":"${amount}","memo":"probe"}`;
+  const readJ = (dir) => JSON.parse(fs.readFileSync(path.join(dir, JOURNAL), "utf8"));
+
+  function p3Ledger({ gasPrice = 102_000_000_000n, baseFee = 100_000_000_000n } = {}) {
+    const l = { nonce: 7, mined: new Map(), mempool: new Map(), payments: [], gasPrice, baseFee };
+    l.mine = () => {
+      for (const [hash, tx] of l.mempool) {
+        const cap = tx.maxFeePerGas ?? tx.gasPrice ?? 0n;
+        if (tx.nonce === l.nonce && cap >= l.baseFee) {
+          l.mempool.delete(hash);
+          l.mined.set(hash, { status: "success", blockNumber: 68990001n + BigInt(l.nonce), transactionHash: hash });
+          l.payments.push({ hash, to: tx.to, value: tx.value, nonce: tx.nonce });
+          l.nonce += 1;
+          return l.mine();
+        }
+        if (tx.nonce < l.nonce) l.mempool.delete(hash);
+      }
+    };
+    return l;
+  }
+
+  function p3Chain(l, { afterReceiptMiss } = {}) {
+    return {
+      async readContract({ functionName }) {
+        return functionName === "checkAgentDelegation"
+          ? [true, 29n, 1]
+          : { owner: OWNER, agent: AGENT_ADDR, tier: 1, createdAt: 1n, expiresAt: 1791345514n, active: true, revoked: false };
+      },
+      async getBalance() { return parseEther("1"); },
+      async getGasPrice() { return l.gasPrice; },
+      async getBlock() { return { baseFeePerGas: l.baseFee }; },
+      async getTransactionCount() { return l.nonce; },
+      async getCode() { return "0x"; },
+      async getTransactionReceipt({ hash }) {
+        const r = l.mined.get(hash);
+        if (r) return r;
+        afterReceiptMiss?.();
+        throw new TransactionReceiptNotFoundError({ hash });
+      },
+    };
+  }
+
+  function p3Wallet(l, { mineOnSend = true, sendThrows = false, waitBehaviour } = {}) {
+    const account = privateKeyToAccount(AGENT_KEY);
+    const sends = [];
+    return {
+      sends,
+      async signTransfer(input) {
+        const raw = await account.signTransaction({
+          chainId: 10143,
+          nonce: input.nonce,
+          to: input.to,
+          value: input.value,
+          gas: input.gas,
+          maxFeePerGas: input.maxFeePerGas,
+          maxPriorityFeePerGas: input.maxPriorityFeePerGas,
+        });
+        return { raw, hash: keccak256(raw) };
+      },
+      async sendRawTransaction({ serializedTransaction }) {
+        sends.push(serializedTransaction);
+        if (typeof sendThrows === "function" ? sendThrows() : sendThrows) throw httpErr();
+        const tx = parseTransaction(serializedTransaction);
+        const hash = keccak256(serializedTransaction);
+        if (!l.mined.has(hash)) l.mempool.set(hash, tx);
+        if (mineOnSend) l.mine();
+        return hash;
+      },
+      async waitForTransactionReceipt({ hash }) {
+        if (waitBehaviour) return waitBehaviour(hash, l);
+        const r = l.mined.get(hash);
+        if (r) return r;
+        throw Object.assign(new Error("timeout"), { name: "WaitForTransactionReceiptTimeoutError" });
+      },
+    };
+  }
+
+  function p3Mida({ briefs, store, rememberThrows }) {
+    const writes = [];
+    return {
+      writes,
+      async status() { return { up: true, text: "x" }; },
+      async context({ namespace }) {
+        if (namespace === "preferences.communication") return { items: briefs(), cursor: null };
+        return { items: store, cursor: null };
+      },
+      async remember({ content }) {
+        if (rememberThrows) throw rememberThrows();
+        const id = "0x" + (store.length + 1).toString(16).padStart(64, "e");
+        store.unshift({
+          id,
+          namespace: "projects.current",
+          kind: "EPISODE",
+          content,
+          author: { name: "trustlayer-agent", id: "0x" + "cd".repeat(32) },
+          source: "AGENT_INFERRED",
+          writtenAt: ASSERTED,
+          state: "anchored",
+        });
+        writes.push(content);
+        return { id, state: "anchored" };
+      },
+    };
+  }
+
+  async function p3Run({ dir, chain, wallet, mida }) {
+    const lines = [];
+    const res = await runAgent({
+      config: config({ projectDir: dir }),
+      chain,
+      wallet,
+      mida,
+      log: (x) => lines.push(x),
+      now: () => new Date(ASSERTED),
+    });
+    return { ...res, lines };
+  }
+
+  it("resolve path: a block landing mid-check is settled, never marked dead", async () => {
+    const dir = tmpDir();
+    const l = p3Ledger();
+    // run A: the broadcast never reaches the node and the wait times out —
+    // exit 4, leaving an open journal entry for brief A
+    let sendDown = true;
+    const wallet = p3Wallet(l, { sendThrows: () => sendDown });
+    const store = [];
+    let briefs = [briefFact(BRIEF_A, briefJson("0.01"))];
+    const mida = p3Mida({ briefs: () => briefs, store });
+    const a = await p3Run({ dir, chain: p3Chain(l), wallet, mida });
+    expect(a.exitCode).toBe(4);
+
+    // The network is back and the owner wrote B. In run B the block carrying A
+    // lands in the gap between the two answers — on the old order (receipt
+    // first, nonce second) that read "no receipt + spent nonce = dead".
+    sendDown = false;
+    const wallet2 = p3Wallet(l, { mineOnSend: false });
+    let misses = 0;
+    const chain2 = p3Chain(l, { afterReceiptMiss: () => { misses += 1; if (misses === 2) l.mine(); } });
+    briefs = [briefFact(BRIEF_B, briefJson("0.02")), briefFact(BRIEF_A, briefJson("0.01"))];
+    const b = await p3Run({ dir, chain: chain2, wallet: wallet2, mida });
+    expect(b.lines.join("\n")).not.toContain("different transaction");
+    expect(readJ(dir)[BRIEF_A].dead).toBeUndefined();
+
+    // A was not falsely buried: a later run receipts it, then B pays
+    const c = await p3Run({ dir, chain: p3Chain(l), wallet: p3Wallet(l), mida });
+    const journal = readJ(dir);
+    expect(c.exitCode).toBe(0);
+    expect(journal[BRIEF_A].receipted).toBeTruthy();
+    expect(journal[BRIEF_B].receipted).toBeTruthy();
+    expect(l.payments.map((p) => p.hash)).toEqual([journal[BRIEF_A].hash, journal[BRIEF_B].hash]);
+    expect(mida.writes.map((w) => w.briefRecordId)).toEqual([BRIEF_A, BRIEF_B]);
+    expect([...a.lines, ...b.lines, ...c.lines].join("\n")).not.toContain("different transaction");
+  });
+
+  it("resolve path: a nonce really spent by a different transaction is still dead", async () => {
+    const dir = tmpDir();
+    const l = p3Ledger();
+    const wallet = p3Wallet(l, { sendThrows: true });
+    const store = [];
+    let briefs = [briefFact(BRIEF_A, briefJson("0.01"))];
+    const mida = p3Mida({ briefs: () => briefs, store });
+    const a = await p3Run({ dir, chain: p3Chain(l), wallet, mida });
+    expect(a.exitCode).toBe(4);
+    l.nonce = 8; // nonce 7 was spent by a transaction this agent never saw
+    briefs = [briefFact(BRIEF_B, briefJson("0.02")), briefFact(BRIEF_A, briefJson("0.01"))];
+    const b = await p3Run({ dir, chain: p3Chain(l), wallet: p3Wallet(l), mida });
+    expect(b.lines.join("\n")).toContain("different transaction");
+    expect(readJ(dir)[BRIEF_A].dead?.reason).toBe("nonce-spent");
+    // ...and the run still goes on to pay B, which is the correct outcome here
+    expect(b.exitCode).toBe(0);
+    expect(mida.writes.map((w) => w.briefRecordId)).toEqual([BRIEF_B]);
+    expect(l.payments).toHaveLength(1);
+  });
+
+  it("sendAndAwait path: our transaction landing mid-check is recovered, never 'can never land'", async () => {
+    const dir = tmpDir();
+    const l = p3Ledger();
+    // the send reaches the mempool; the wait dies on a transport error; the
+    // block lands while the run asks the node for the nonce — the spent nonce
+    // is ours, so the receipt the run finds afterwards belongs to our send
+    const wallet = p3Wallet(l, { mineOnSend: false, waitBehaviour: () => { throw httpErr(); } });
+    const store = [];
+    const mida = p3Mida({ briefs: () => [briefFact(BRIEF_A, briefJson("0.01"))], store });
+    const chain = p3Chain(l);
+    const count = chain.getTransactionCount;
+    chain.getTransactionCount = async (args) => {
+      l.mine();
+      return count(args);
+    };
+    const r1 = await p3Run({ dir, chain, wallet, mida });
+    expect(r1.exitCode).toBe(0);
+    expect(l.payments).toHaveLength(1);
+    expect(readJ(dir)[BRIEF_A].receipted).toBeTruthy();
+    expect(r1.lines.join("\n")).not.toContain("different transaction");
+    expect(r1.lines.join("\n")).not.toContain("can never land");
+
+    const r2 = await p3Run({ dir, chain: p3Chain(l), wallet: p3Wallet(l), mida });
+    expect(r2.lines.at(-1)).toContain("already done");
+    expect(r2.exitCode).toBe(0);
+    expect(l.payments).toHaveLength(1);
+  });
+
+  it("sendAndAwait path: a nonce really spent by a different transaction is still dead", async () => {
+    const dir = tmpDir();
+    const l = p3Ledger();
+    const wallet = p3Wallet(l, { sendThrows: true });
+    const store = [];
+    const mida = p3Mida({ briefs: () => [briefFact(BRIEF_A, briefJson("0.01"))], store });
+    const a = await p3Run({ dir, chain: p3Chain(l), wallet, mida });
+    expect(a.exitCode).toBe(4);
+    l.nonce = 8; // spent by a transaction this agent never saw — ours can never land
+    const b = await p3Run({ dir, chain: p3Chain(l), wallet: p3Wallet(l), mida });
+    expect(b.exitCode).toBe(4);
+    expect(b.lines.join("\n")).toContain("different transaction");
+    expect(readJ(dir)[BRIEF_A].dead?.reason).toBe("nonce-spent");
+    expect(l.payments).toHaveLength(0);
   });
 });
 

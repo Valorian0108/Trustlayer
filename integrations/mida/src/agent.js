@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import { isMidaSdkError } from "@mida-context/sdk";
 import { formatEther, formatGwei, keccak256, parseTransaction, recoverTransactionAddress, zeroAddress } from "viem";
 import { monadTestnet } from "viem/chains";
@@ -10,6 +11,11 @@ const BRIEF_NAMESPACE = "preferences.communication";
 const RECEIPT_NAMESPACE = "projects.current";
 const BRIEF_PAGE_BYTES = 16_384;
 const RECEIPT_PAGE_BYTES = 65_536;
+// Monad's block time is ~0.4 s: a spent nonce with a definite "no receipt" gets
+// one more look after a few blocks before the entry may be called dead, and a
+// re-broadcast gets a bounded wait before the entry is checked again.
+const SPENT_NONCE_SETTLE_MS = 2_000;
+const RESOLVE_WAIT_MS = 10_000;
 
 export class PartialReadError extends Error {
   constructor() {
@@ -144,39 +150,54 @@ async function sendAndAwait({ config, chain, wallet, mida, log, now, journal, de
 
   // The wait can die on an RPC error after the transaction already mined, and
   // then the spent nonce belongs to OUR transaction — never another one. So
-  // before the nonce is read at all, ask the chain for the journaled hash; and
-  // remember if the node could not answer, because then the nonce must not be
-  // read as "someone else spent it" — ours may be what spent it.
+  // the nonce is read FIRST and our receipt second: asked the other way around,
+  // a transaction mining between the two answers pairs "no receipt" with
+  // "nonce spent" — the shape of a replaced transaction — and our own mined
+  // send would be recorded dead. A definite "no receipt" paired with a spent
+  // nonce can still be a receipt about to appear, so it gets one more look
+  // after a couple of seconds before the entry may be called dead; and if the
+  // node cannot answer at all, the nonce must not be read as "someone else
+  // spent it" — ours may be what spent it.
+  let nonceSpent = null; // null when the node could not answer
   let lookupFailed = false;
-  if (!receipt) {
+  const lookupReceipt = async () => {
     try {
       receipt = await chain.getTransactionReceipt({ hash: signed.hash });
+      lookupFailed = false;
     } catch (error) {
       // viem names a genuinely absent receipt TransactionReceiptNotFoundError;
       // any other failure means the node could not answer at all.
-      if (error && error.name === "TransactionReceiptNotFoundError") receipt = null;
-      else lookupFailed = true;
+      receipt = null;
+      lookupFailed = !(error && error.name === "TransactionReceiptNotFoundError");
+    }
+  };
+  if (!receipt) {
+    try {
+      const latest = await chain.getTransactionCount({ address: config.agentAddress, blockTag: "latest" });
+      nonceSpent = BigInt(latest) > BigInt(signed.nonce);
+    } catch {
+      // the node cannot say — the receipt answer still counts
+    }
+    await lookupReceipt();
+    if (!receipt && nonceSpent === true && !lookupFailed) {
+      await sleep(SPENT_NONCE_SETTLE_MS);
+      await lookupReceipt();
     }
   }
 
   if (!receipt) {
     // If the journaled nonce is already spent on chain by a transaction that
     // is not ours, this transaction can never land — say so and keep the journal.
-    try {
-      const latest = await chain.getTransactionCount({ address: config.agentAddress, blockTag: "latest" });
-      if (BigInt(latest) > BigInt(signed.nonce)) {
-        if (!lookupFailed) {
-          markJournalDead(config.projectDir, journal, brief.id, { reason: "nonce-spent", at: now().toISOString() });
-        }
-        log(
-          lookupFailed
-            ? `chain: the nonce the journaled transaction used is spent, but the node cannot tell whether tx ${signed.hash} is what spent it — its receipt lookup failed. Whether it landed is unknown; do not delete the journal — running again re-checks.`
-            : `chain: the nonce the journaled transaction used was already spent by a different transaction — tx ${signed.hash} can never land. No Mida receipt was written; the journal keeps the record, marked dead.`
-        );
-        return { exitCode: 4, outcome: "nonce-spent", txHash: signed.hash };
+    if (nonceSpent === true) {
+      if (!lookupFailed) {
+        markJournalDead(config.projectDir, journal, brief.id, { reason: "nonce-spent", at: now().toISOString() });
       }
-    } catch {
-      // cannot tell — fall through to the unknown-outcome lines
+      log(
+        lookupFailed
+          ? `chain: the nonce the journaled transaction used is spent, but the node cannot tell whether tx ${signed.hash} is what spent it — its receipt lookup failed. Whether it landed is unknown; do not delete the journal — running again re-checks.`
+          : `chain: the nonce the journaled transaction used was already spent by a different transaction — tx ${signed.hash} can never land. No Mida receipt was written; the journal keeps the record, marked dead.`
+      );
+      return { exitCode: 4, outcome: "nonce-spent", txHash: signed.hash };
     }
     // A journaled fee cap under the current base fee means the bytes cannot
     // mine while that holds — say exactly that, not "unknown": they can still
@@ -266,15 +287,10 @@ async function resolveJournalEntry({ config, chain, wallet, mida, log, now, jour
     return "invalid";
   }
   const decoded = check.decoded;
-  for (let pass = 0; pass < 2; pass += 1) {
-    let receipt = null;
-    let lookupFailed = false;
-    try {
-      receipt = await chain.getTransactionReceipt({ hash: entry.hash });
-    } catch (error) {
-      if (!(error && error.name === "TransactionReceiptNotFoundError")) lookupFailed = true;
-    }
-    if (receipt && receipt.status === "success") {
+  // A receipt for the journaled hash settles the entry: success writes the
+  // missing receipt; anything else can never pay and the entry is kept, dead.
+  const settle = async (receipt) => {
+    if (receipt.status === "success") {
       // the transaction landed; the missing piece is this brief's receipt
       log(
         `journal: the journaled transaction for brief ${shortId(entryId)} is confirmed (tx ${entry.hash}, block ${receipt.blockNumber.toLocaleString("en-US")}). Writing the missing receipt now.`
@@ -302,30 +318,62 @@ async function resolveJournalEntry({ config, chain, wallet, mida, log, now, jour
         throw error;
       }
     }
-    if (receipt) {
-      markJournalDead(config.projectDir, journal, entryId, { reason: "reverted", at: now().toISOString() });
-      log(`journal: the journaled transaction for brief ${shortId(entryId)} reverted on-chain (tx ${entry.hash}) — it can never pay. The entry is kept, marked dead.`);
-      return "dead";
-    }
+    markJournalDead(config.projectDir, journal, entryId, { reason: "reverted", at: now().toISOString() });
+    log(`journal: the journaled transaction for brief ${shortId(entryId)} reverted on-chain (tx ${entry.hash}) — it can never pay. The entry is kept, marked dead.`);
+    return "dead";
+  };
+  for (let pass = 0; pass < 2; pass += 1) {
+    // The nonce read comes first, for the same reason as in sendAndAwait:
+    // answered the other way around, a block landing between the two answers
+    // reads as "a different transaction spent the nonce" and buries our own
+    // mined send.
+    let nonceSpent = null;
     try {
       const latest = await chain.getTransactionCount({ address: config.agentAddress, blockTag: "latest" });
-      if (BigInt(latest) > BigInt(entry.nonce) && !lookupFailed) {
-        markJournalDead(config.projectDir, journal, entryId, { reason: "nonce-spent", at: now().toISOString() });
-        log(
-          `journal: the nonce of the journaled transaction for brief ${shortId(entryId)} was spent by a different transaction — tx ${entry.hash} can never land. The entry is kept, marked dead.`
-        );
-        return "dead";
-      }
+      nonceSpent = BigInt(latest) > BigInt(entry.nonce);
     } catch {
       // the node cannot say — treat as unresolved rather than guessing
     }
+    let receipt = null;
+    let lookupFailed = false;
+    const lookup = async () => {
+      try {
+        receipt = await chain.getTransactionReceipt({ hash: entry.hash });
+        lookupFailed = false;
+      } catch (error) {
+        receipt = null;
+        lookupFailed = !(error && error.name === "TransactionReceiptNotFoundError");
+      }
+    };
+    await lookup();
+    // a spent nonce with a definite "no receipt" may be a block still landing;
+    // one more look after a couple of seconds before it may be called dead
+    if (!receipt && nonceSpent === true && !lookupFailed) {
+      await sleep(SPENT_NONCE_SETTLE_MS);
+      await lookup();
+    }
+    if (receipt) return settle(receipt);
+    if (nonceSpent === true && !lookupFailed) {
+      markJournalDead(config.projectDir, journal, entryId, { reason: "nonce-spent", at: now().toISOString() });
+      log(
+        `journal: the nonce of the journaled transaction for brief ${shortId(entryId)} was spent by a different transaction — tx ${entry.hash} can never land. The entry is kept, marked dead.`
+      );
+      return "dead";
+    }
     if (pass === 0) {
       // still open — re-broadcast the same bytes so a dropped transaction
-      // re-enters the mempool, then check once more
+      // re-enters the mempool, then give it a real, bounded wait: an immediate
+      // re-check was exactly the gap a racing block landed in
       try {
         await wallet.sendRawTransaction({ serializedTransaction: entry.raw });
       } catch {
         // the node may already hold the bytes — the outcome is the same
+      }
+      try {
+        const settled = await wallet.waitForTransactionReceipt({ hash: entry.hash, timeout: RESOLVE_WAIT_MS });
+        if (settled) return settle(settled);
+      } catch {
+        // a timeout or an RPC error leaves the entry open for the re-check
       }
     }
   }
