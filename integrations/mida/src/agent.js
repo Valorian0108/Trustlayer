@@ -565,7 +565,7 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
       }
       if (isCurrentBrief) {
         if (dryRun) {
-          log(`journal: a signed transaction for this brief is on record (tx ${entry.hash}); a real run re-sends those same bytes and writes the missing receipt.`);
+          log(`journal: a signed transaction for this brief is on record (tx ${entry.hash}); a real run would first verify those bytes — and may refuse them — then re-send them, and write the receipt only if the transaction lands.`);
           log("dry run: nothing sent, nothing written.");
           return { exitCode: 0, outcome: "dry-run" };
         }

@@ -24,8 +24,9 @@ recorded: Mida receipt 0xf7d4bf13… (anchored) in projects.current, author trus
 ```
 
 The order is deliberate: the cheap public chain read comes first, so an agent whose delegation was revoked never
-touches the owner's context at all. A `--dry-run` adds one line — the agent's Mida status for this folder —
-printed only after the delegation check passes.
+touches the owner's context at all. A `--dry-run` prints the same opening lines — the agent's Mida status for
+this folder, the brief it finds and the decision it would act on — then stops at
+`dry run: nothing sent, nothing written.`, all of it only after the delegation check passes.
 
 ## Setup for the owner
 
@@ -37,7 +38,9 @@ values literally — it does not expand `$HOME`, so paths in `.env` must be abso
 
 Every `mida` command below is written with `MIDA_HOME=$HOME/.mida-trustlayer` in front of it, on purpose: the
 checklist runs over several terminals, and an exported variable from day one would silently be gone in a new
-terminal — writing the brief into the owner's everyday Mida home instead.
+terminal — writing the brief into the owner's everyday Mida home instead. Two hints the run relays from the
+Mida SDK name `mida` commands without `MIDA_HOME` — "run any `mida` command to start it" and "run `mida
+approve trustlayer-agent`"; when following one, put `MIDA_HOME=$HOME/.mida-trustlayer` in front of it.
 
 1. **A Mida home just for this demo**, so a revoke here cannot touch everyday agents:
    `MIDA_HOME=$HOME/.mida-trustlayer mida init` (sponsored gas; a new owner key), then
@@ -84,6 +87,16 @@ While a run is in flight it holds `.trustlayer-run.lock` in the project folder; 
 pid it names (`ps -p <pid>`) and remove the lock file only when that process is really gone — taking over a
 live run's lock would let two overlapping runs pay two different briefs.
 
+## On the day
+
+Two habits keep the checklist honest:
+
+- **If a run exits 4, re-run the same brief** until it prints `recovered` or `already done` before writing any
+  new brief. An exit 4 can leave a transaction that landed — or can still land — unresolved, and the journal
+  settles it before anything new is signed.
+- **Treat a "can never land" or "dead" hash as unproven** until it has been looked up on the explorer — the
+  verdict is read from the node's answers, and the explorer is the ground truth.
+
 ## The two revocations, and what each stops
 
 - **Revoke the TrustLayer delegation** — `cast send 0x088bc310c841fA5ed5b28F37050c3B419572b70d
@@ -115,7 +128,7 @@ non-zero.
 | R4 | The brief parses and is well-formed: `"trustlayer": 1`, `action` is `"transfer"`, `to` is a 20-byte address that is not zero, this wallet, or a contract, `amountMon` is a positive decimal with at most 18 decimal places, `memo` is a string ≤ 200 chars (optional). A malformed newest brief refuses — it never falls back to an older one. | exit 2 |
 | R5 | Not already done: no receipt **this agent wrote** (source `AGENT_INFERRED`, its own author name) in `projects.current` carries this brief's record id. | exit 0 |
 | R6 | `amountMon` fits the tier's immediate-execution cap. | exit 2 |
-| R7 | The wallet balance covers amount + 21,000 × the gas price the transaction will bid. | exit 2 |
+| R7 | The wallet balance covers amount + 21,000 × the maximum fee the transaction would be signed with — twice the current gas price. | exit 2 |
 | Act | Sign locally, journal the bytes, broadcast; wait ≤ 60 s; the on-chain receipt must be `success` and carry the same hash. | exit 4 |
 | Rec | Write the Mida receipt into `projects.current` (kind EPISODE). | exit 5 — the transfer happened; the line says so, and running again writes only the receipt |
 
@@ -146,8 +159,9 @@ Known limits of the once-per-brief guarantee:
   is the id, so the new record would be paid again. Edit a brief only if paying it again is acceptable.
 - The delegation is checked once, seconds before the send; a TrustLayer revoke that lands during the Mida reads
   does not stop that run.
-- A `pending` (batched) record is treated as final — a pending receipt that never anchors would re-open the
-  payment. This only arises with batching on; the checklist turns it off in step 1.
+- A `pending` (batched) record is treated as final. If a pending receipt never anchors, the journal's
+  `receipted` mark still blocks a second signature — the brief just looks unpaid on Mida's side. This only
+  arises with batching on; the checklist turns it off in step 1.
 - Mida allows one receipt write per minute per agent on the direct lane — space live runs accordingly. If a
   second run inside the minute sends, its receipt write is refused (exit 5); the transfer happened, the line
   says so, and the next run writes only the missing receipt — never a second payment.
@@ -160,6 +174,15 @@ Known limits of the once-per-brief guarantee:
   Mida's side.
 - "Paid" is judged at Monad's `latest`, a proposed block rather than a finalized one — a receipt or a
   transaction seen there could, rarely, be dropped.
+- A journal entry copied by hand onto another brief — one with the same recipient and amount — is accepted,
+  because the signed bytes do not name the brief; the copy would pay that brief and write it a false
+  "recovered" receipt. Fix a corrupt journal by hand only to repair it, never to move entries.
+- Three runs racing over a stale lock can leave two of them holding it — the takeover rename and a new lock
+  can interleave. The checklist spaces runs a minute apart, so hitting this takes a deliberate script.
+- A pid reused by a live process makes a stale lock look held and blocks every run — the printed line names
+  the lock file; check the pid (`ps -p <pid>`) and remove the file only when that process is really gone.
+- A receipt written while resolving an older journal entry takes tier, cap, expiry and owner from the
+  *current* delegation — only the delegation id is the one the transaction was signed under.
 
 No scheduler, no ERC-20, no contract calls: the agent does exactly one thing — a plain MON transfer — once per
 brief.
