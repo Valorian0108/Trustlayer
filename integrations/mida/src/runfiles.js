@@ -74,8 +74,10 @@ export function acquireLock(dir) {
         release() {
           if (released) return;
           released = true;
+          // only our own lock — if the path now holds another run's record,
+          // its file is not ours to remove
           try {
-            fs.unlinkSync(file);
+            if (readLockPid(file) === process.pid) fs.unlinkSync(file);
           } catch {
             // already gone — nothing to release
           }

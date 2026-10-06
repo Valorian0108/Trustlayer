@@ -1060,4 +1060,15 @@ describe("acquireLock", () => {
     fs.writeFileSync(path.join(dir, ".trustlayer-run.lock"), `${process.pid}\n`);
     expect(() => acquireLock(dir)).toThrow(LockHeldError);
   });
+
+  it("release removes only the lock that still holds its own pid", () => {
+    // if the path was taken over and now carries another run's record, our
+    // release must not remove it
+    const dir = tmpDir();
+    const file = path.join(dir, ".trustlayer-run.lock");
+    const lock = acquireLock(dir);
+    fs.writeFileSync(file, "999999\n");
+    lock.release();
+    expect(fs.existsSync(file)).toBe(true);
+  });
 });
