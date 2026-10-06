@@ -827,6 +827,36 @@ describe("runAgent", () => {
     expect(lines.at(-1)).not.toContain("unexpected");
   });
 
+  it("refuses with exit 4 when the journal parses to null", async () => {
+    // "null" used to read as an empty journal and let the run pay — a file
+    // that is not an object of entries is corrupt and may hide a payment
+    const dir = tmpDir();
+    const node = makeNode();
+    const wallet = makeWallet({ node });
+    fs.writeFileSync(path.join(dir, ".trustlayer-journal.json"), "null\n");
+    const { result, lines } = await run({ node, wallet, projectDir: dir });
+    expect(result.exitCode).toBe(4);
+    expect(lines.at(-1)).toContain(".trustlayer-journal.json");
+    expect(lines.at(-1)).toContain("never delete");
+    expect(wallet.signCalls).toHaveLength(0);
+    expect(node.payments).toHaveLength(0);
+  });
+
+  it("refuses with exit 4 when the journal parses to an array", async () => {
+    // [] is an object in JavaScript: it read as empty, and the next write
+    // would have silently dropped every entry it was supposed to keep
+    const dir = tmpDir();
+    const node = makeNode();
+    const wallet = makeWallet({ node });
+    fs.writeFileSync(path.join(dir, ".trustlayer-journal.json"), "[]\n");
+    const { result, lines } = await run({ node, wallet, projectDir: dir });
+    expect(result.exitCode).toBe(4);
+    expect(lines.at(-1)).toContain(".trustlayer-journal.json");
+    expect(lines.at(-1)).toContain("never delete");
+    expect(wallet.signCalls).toHaveLength(0);
+    expect(node.payments).toHaveLength(0);
+  });
+
   it("refuses to re-send a journaled entry whose bytes do not decode", async () => {
     // probe 6b: a hand-edited journal points brief B at brief A's mined hash
     // with junk bytes — on the buggy path B got a receipt naming A's transfer

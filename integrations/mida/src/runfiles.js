@@ -129,7 +129,13 @@ export function acquireLock(dir) {
 export function readJournal(dir) {
   try {
     const parsed = JSON.parse(fs.readFileSync(path.join(dir, JOURNAL_FILE), "utf8"));
-    return parsed && typeof parsed === "object" ? parsed : {};
+    // only a plain object maps brief ids to entries — null would read as an
+    // empty journal and pay; [] is an object in JavaScript and the next write
+    // would silently drop every entry it was meant to keep
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("the journal is not an object of entries");
+    }
+    return parsed;
   } catch (error) {
     if (error.code === "ENOENT") return {};
     throw error;
