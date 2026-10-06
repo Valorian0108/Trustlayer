@@ -1,14 +1,14 @@
 import { isMidaSdkError } from "@mida-context/sdk";
 import { monadTestnet } from "viem/chains";
 import { BriefError, parseBrief, pickBrief, shortId } from "./brief.js";
-import { decide, noDelegationLine } from "./decide.js";
+import { alreadyDoneLine, decide, noDelegationLine, ownReceiptFor } from "./decide.js";
+import { acquireLock, LockHeldError, readJournal, removeJournalEntry, writeJournalEntry } from "./runfiles.js";
 import { autoCapMon, ChainError, errorClass, readDelegation, rpcHost, shortAddr } from "./trustlayer.js";
 
 const BRIEF_NAMESPACE = "preferences.communication";
 const RECEIPT_NAMESPACE = "projects.current";
 const BRIEF_PAGE_BYTES = 16_384;
 const RECEIPT_PAGE_BYTES = 65_536;
-const EXPLORER_TX = "https://testnet.monadscan.com/tx/";
 
 export class PartialReadError extends Error {
   constructor() {
@@ -36,122 +36,69 @@ function midaRefusedLine(error) {
   return `mida: refused (${error.code}) — ${error.message.replace(/\.$/, "")}. Nothing was sent.`;
 }
 
-export async function runAgent({ config, chain, wallet, mida, log, now = () => new Date(), dryRun = false }) {
-  let delegation;
+// Broadcast the signed bytes, then wait for the journaled hash. A send error
+// does NOT mean nothing reached the node (viem retries the broadcast after
+// its own timeout and on 5xx/429), so the wait runs either way.
+async function sendAndAwait({ config, chain, wallet, mida, log, now, delegation, brief, signed, recovery }) {
+  if (recovery) {
+    log(`journal: a signed transaction for this brief is on record (tx ${signed.hash}); re-sending the same bytes — it cannot pay twice.`);
+  }
+  let sendError = null;
   try {
-    delegation = await readDelegation(chain, {
-      registry: config.registry,
-      owner: config.trustlayerOwner,
-      agent: config.agentAddress,
-      rpcUrl: config.rpcUrl,
-    });
+    await wallet.sendRawTransaction({ serializedTransaction: signed.raw });
   } catch (error) {
-    if (error instanceof ChainError) {
-      log(error.message);
-      return { exitCode: error.exitCode, outcome: "chain-error" };
-    }
-    throw error;
+    sendError = error;
   }
-  if (!delegation.valid) {
-    log(noDelegationLine(delegation));
-    return { exitCode: 2, outcome: "refused" };
+  let receipt = null;
+  let waitError = null;
+  try {
+    receipt = await wallet.waitForTransactionReceipt({ hash: signed.hash });
+  } catch (error) {
+    waitError = error;
   }
-  log(
-    `trustlayer: delegation #${delegation.id} from ${shortAddr(delegation.owner)} to ${shortAddr(delegation.agent)} — tier ${delegation.tierLabel}, expires ${delegation.expiresAt ?? "never"}`
-  );
 
-  let facts;
-  try {
-    facts = await readAll(mida, BRIEF_NAMESPACE, BRIEF_PAGE_BYTES);
-  } catch (error) {
-    if (error instanceof PartialReadError) {
-      log(PARTIAL_READ_LINE);
-      return { exitCode: 3, outcome: "partial-read" };
+  if (!receipt) {
+    // If the journaled nonce is already spent on chain by a transaction that
+    // is not ours, this transaction can never land — say so and keep the journal.
+    try {
+      const latest = await chain.getTransactionCount({ address: config.agentAddress, blockTag: "latest" });
+      if (BigInt(latest) > BigInt(signed.nonce)) {
+        log(
+          `chain: the nonce the journaled transaction used was already spent by a different transaction — tx ${signed.hash} can never land. No Mida receipt was written; the journal keeps the record.`
+        );
+        return { exitCode: 4, outcome: "nonce-spent", txHash: signed.hash };
+      }
+    } catch {
+      // cannot tell — fall through to the unknown-outcome lines
     }
-    if (isMidaSdkError(error)) {
-      log(midaRefusedLine(error));
-      return { exitCode: 3, outcome: "refused" };
+    const retry = "The signed transaction is journaled — running again re-sends the same bytes, which cannot pay twice. Whether it landed is unknown.";
+    if (sendError) {
+      log(`chain: the send failed (${errorClass(sendError)}) and tx ${signed.hash} could not be confirmed (${errorClass(waitError)}). ${retry}`);
+    } else {
+      log(
+        waitError instanceof Error && waitError.name.includes("Timeout")
+          ? `chain: tx ${signed.hash} was not confirmed within 60 s. ${retry}`
+          : `chain: tx ${signed.hash} could not be confirmed (${errorClass(waitError)}). ${retry}`
+      );
     }
-    throw error;
+    return { exitCode: 4, outcome: "unconfirmed", txHash: signed.hash };
   }
-  const picked = pickBrief(facts);
-  if (!picked) {
+
+  if (receipt.transactionHash && receipt.transactionHash.toLowerCase() !== signed.hash.toLowerCase()) {
     log(
-      `mida: no brief found in preferences.communication. Write one with: mida remember '{"trustlayer":1,"action":"transfer","to":"0x…","amountMon":"0.01"}'. Nothing was sent.`
+      `chain: tx ${signed.hash} was replaced before it mined — the mined transaction is ${receipt.transactionHash}. The journaled nonce is spent by that transaction; running again reports the same. No Mida receipt was written.`
     );
-    return { exitCode: 2, outcome: "refused" };
-  }
-  let brief;
-  try {
-    brief = parseBrief(picked);
-  } catch (error) {
-    if (error instanceof BriefError) {
-      log(error.message);
-      return { exitCode: 2, outcome: "refused" };
-    }
-    throw error;
-  }
-  log(
-    `mida: ${config.midaAgent} approved; brief ${shortId(brief.id)} (${brief.author?.name ?? "owner"}, ${brief.assertedAt ?? "unknown time"}): transfer ${brief.amountMon} MON to ${shortAddr(brief.to)}`
-  );
-
-  let receipts;
-  try {
-    receipts = await readAll(mida, RECEIPT_NAMESPACE, RECEIPT_PAGE_BYTES);
-  } catch (error) {
-    if (error instanceof PartialReadError) {
-      log(PARTIAL_READ_LINE);
-      return { exitCode: 3, outcome: "partial-read" };
-    }
-    if (isMidaSdkError(error)) {
-      log(midaRefusedLine(error));
-      return { exitCode: 3, outcome: "refused" };
-    }
-    throw error;
-  }
-
-  let balanceWei;
-  let gasPriceWei;
-  try {
-    balanceWei = await chain.getBalance({ address: config.agentAddress });
-    gasPriceWei = await chain.getGasPrice();
-  } catch (error) {
-    log(`chain: could not read the wallet state over ${rpcHost(config.rpcUrl)} (${errorClass(error)}). Nothing was sent.`);
-    return { exitCode: 4, outcome: "chain-error" };
-  }
-
-  const decision = decide({ delegation, brief, receipts, balanceWei, gasPriceWei, agentName: config.midaAgent });
-  log(decision.line);
-  if (decision.kind === "refuse") return { exitCode: 2, outcome: "refused" };
-  if (decision.kind === "already-done") return { exitCode: 0, outcome: "already-done" };
-  if (dryRun) {
-    log("dry run: nothing sent, nothing written.");
-    return { exitCode: 0, outcome: "dry-run" };
-  }
-
-  let hash;
-  try {
-    hash = await wallet.sendTransaction({ to: brief.to, value: brief.amountWei });
-  } catch (error) {
-    log(`chain: the transaction was rejected (${errorClass(error)}). Nothing was sent.`);
-    return { exitCode: 4, outcome: "send-rejected" };
-  }
-  let receipt;
-  try {
-    receipt = await wallet.waitForTransactionReceipt({ hash });
-  } catch (error) {
-    const line =
-      error instanceof Error && error.name.includes("Timeout")
-        ? `chain: tx ${hash} was not confirmed within 60 s. Check it on ${EXPLORER_TX}${hash} before running again; no Mida receipt was written.`
-        : `chain: tx ${hash} could not be confirmed (${errorClass(error)}). Check it on ${EXPLORER_TX}${hash} before running again; no Mida receipt was written.`;
-    log(line);
-    return { exitCode: 4, outcome: "unconfirmed", txHash: hash };
+    return { exitCode: 4, outcome: "replaced", txHash: signed.hash };
   }
   if (receipt.status !== "success") {
-    log(`chain: tx ${hash} reverted. No Mida receipt was written.`);
-    return { exitCode: 4, outcome: "reverted", txHash: hash };
+    log(`chain: tx ${signed.hash} reverted. No Mida receipt was written.`);
+    return { exitCode: 4, outcome: "reverted", txHash: signed.hash };
   }
-  log(`sent: ${brief.amountMon} MON to ${shortAddr(brief.to)} — tx ${hash} (block ${receipt.blockNumber.toLocaleString("en-US")})`);
+  log(
+    recovery
+      ? `recovered: the journaled transaction ${signed.hash} is confirmed (block ${receipt.blockNumber.toLocaleString("en-US")}). Writing the receipt now.`
+      : `sent: ${brief.amountMon} MON to ${shortAddr(brief.to)} — tx ${signed.hash} (block ${receipt.blockNumber.toLocaleString("en-US")})`
+  );
 
   const content = {
     trustlayerReceipt: 1,
@@ -167,7 +114,7 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
       owner: delegation.owner,
     },
     action: { kind: "transfer", to: brief.to, amountMon: brief.amountMon, memo: brief.memo },
-    tx: { hash, block: receipt.blockNumber.toString(), status: receipt.status, from: config.agentAddress, chainId: monadTestnet.id },
+    tx: { hash: signed.hash, block: receipt.blockNumber.toString(), status: receipt.status, from: config.agentAddress, chainId: monadTestnet.id },
     at: now().toISOString(),
   };
   let saved;
@@ -176,16 +123,161 @@ export async function runAgent({ config, chain, wallet, mida, log, now = () => n
   } catch (error) {
     if (isMidaSdkError(error)) {
       log(
-        `mida: the transfer happened (tx ${hash}) but the receipt was refused (${error.code}) — ${error.message.replace(/\.$/, "")}. The already-done guard cannot see this transfer: do not re-run with the same brief.`
+        `mida: the transfer happened (tx ${signed.hash}) but the receipt write failed (${error.code}) — ${error.message.replace(/\.$/, "")}. The write may still have landed; running again is safe — it re-sends the same signed transaction (which cannot pay twice) and writes only the missing receipt.`
       );
-      return { exitCode: 5, outcome: "receipt-refused", txHash: hash };
+      return { exitCode: 5, outcome: "receipt-write-failed", txHash: signed.hash };
     }
     throw error;
   }
+  removeJournalEntry(config.projectDir, brief.id);
   log(
     saved.state === "pending"
       ? `recorded: Mida receipt ${shortId(saved.id)} (pending) in projects.current — it anchors with the next batch.`
       : `recorded: Mida receipt ${shortId(saved.id)} (anchored) in projects.current, author ${config.midaAgent}`
   );
-  return { exitCode: 0, outcome: "sent", txHash: hash, receiptId: saved.id };
+  return { exitCode: 0, outcome: recovery ? "recovered" : "sent", txHash: signed.hash, receiptId: saved.id };
+}
+
+export async function runAgent({ config, chain, wallet, mida, log, now = () => new Date(), dryRun = false }) {
+  let lock;
+  try {
+    lock = acquireLock(config.projectDir);
+  } catch (error) {
+    if (error instanceof LockHeldError) {
+      log(`mida: another run is in progress (pid ${error.pid}). Nothing was sent.`);
+      return { exitCode: 1, outcome: "locked" };
+    }
+    throw error;
+  }
+  try {
+    let delegation;
+    try {
+      delegation = await readDelegation(chain, {
+        registry: config.registry,
+        owner: config.trustlayerOwner,
+        agent: config.agentAddress,
+        rpcUrl: config.rpcUrl,
+      });
+    } catch (error) {
+      if (error instanceof ChainError) {
+        log(error.message);
+        return { exitCode: error.exitCode, outcome: "chain-error" };
+      }
+      throw error;
+    }
+    if (!delegation.valid) {
+      log(noDelegationLine(delegation));
+      return { exitCode: 2, outcome: "refused" };
+    }
+    log(
+      `trustlayer: delegation #${delegation.id} from ${shortAddr(delegation.owner)} to ${shortAddr(delegation.agent)} — tier ${delegation.tierLabel}, expires ${delegation.expiresAt ?? "never"}`
+    );
+
+    let facts;
+    try {
+      facts = await readAll(mida, BRIEF_NAMESPACE, BRIEF_PAGE_BYTES);
+    } catch (error) {
+      if (error instanceof PartialReadError) {
+        log(PARTIAL_READ_LINE);
+        return { exitCode: 3, outcome: "partial-read" };
+      }
+      if (isMidaSdkError(error)) {
+        log(midaRefusedLine(error));
+        return { exitCode: 3, outcome: "refused" };
+      }
+      throw error;
+    }
+    const picked = pickBrief(facts);
+    if (!picked) {
+      log(
+        `mida: no brief found in preferences.communication. Write one with: mida remember '{"trustlayer":1,"action":"transfer","to":"0x…","amountMon":"0.01"}'. Nothing was sent.`
+      );
+      return { exitCode: 2, outcome: "refused" };
+    }
+    let brief;
+    try {
+      brief = parseBrief(picked);
+    } catch (error) {
+      if (error instanceof BriefError) {
+        log(error.message);
+        return { exitCode: 2, outcome: "refused" };
+      }
+      throw error;
+    }
+    log(
+      `mida: ${config.midaAgent} approved; brief ${shortId(brief.id)} (${brief.author?.name ?? "owner"}, ${brief.assertedAt ?? "unknown time"}): transfer ${brief.amountMon} MON to ${shortAddr(brief.to)}`
+    );
+
+    let receipts;
+    try {
+      receipts = await readAll(mida, RECEIPT_NAMESPACE, RECEIPT_PAGE_BYTES);
+    } catch (error) {
+      if (error instanceof PartialReadError) {
+        log(PARTIAL_READ_LINE);
+        return { exitCode: 3, outcome: "partial-read" };
+      }
+      if (isMidaSdkError(error)) {
+        log(midaRefusedLine(error));
+        return { exitCode: 3, outcome: "refused" };
+      }
+      throw error;
+    }
+
+    // A receipt this agent wrote for this brief settles it — whatever an old
+    // journal entry says, the payment and the record both exist.
+    const existing = ownReceiptFor(receipts, brief.id, config.midaAgent);
+    if (existing) {
+      removeJournalEntry(config.projectDir, brief.id);
+      log(alreadyDoneLine(existing, brief.id));
+      return { exitCode: 0, outcome: "already-done" };
+    }
+
+    // A journaled transaction for this brief means an earlier run already
+    // decided to send and signed. The only safe move is to re-broadcast those
+    // exact bytes — the nonce inside them means the chain sees one transaction.
+    const journaled = readJournal(config.projectDir)[brief.id];
+    if (journaled) {
+      if (dryRun) {
+        log(`journal: a signed transaction for this brief is on record (tx ${journaled.hash}); a real run re-sends those same bytes and writes the missing receipt.`);
+        log("dry run: nothing sent, nothing written.");
+        return { exitCode: 0, outcome: "dry-run" };
+      }
+      return await sendAndAwait({ config, chain, wallet, mida, log, now, delegation, brief, signed: journaled, recovery: true });
+    }
+
+    let balanceWei;
+    let gasPriceWei;
+    try {
+      balanceWei = await chain.getBalance({ address: config.agentAddress });
+      gasPriceWei = await chain.getGasPrice();
+    } catch (error) {
+      log(`chain: could not read the wallet state over ${rpcHost(config.rpcUrl)} (${errorClass(error)}). Nothing was sent.`);
+      return { exitCode: 4, outcome: "chain-error" };
+    }
+
+    const decision = decide({ delegation, brief, receipts, balanceWei, gasPriceWei, agentName: config.midaAgent });
+    log(decision.line);
+    if (decision.kind === "refuse") return { exitCode: 2, outcome: "refused" };
+    if (decision.kind === "already-done") return { exitCode: 0, outcome: "already-done" };
+    if (dryRun) {
+      log("dry run: nothing sent, nothing written.");
+      return { exitCode: 0, outcome: "dry-run" };
+    }
+
+    // Sign first, journal second, broadcast last — so any outcome after this
+    // point can be recovered by re-sending the identical bytes.
+    let nonce;
+    let prepared;
+    try {
+      nonce = await chain.getTransactionCount({ address: config.agentAddress, blockTag: "pending" });
+      prepared = await wallet.signTransfer({ to: brief.to, value: brief.amountWei, nonce, gas: 21000n, gasPrice: gasPriceWei });
+    } catch (error) {
+      log(`chain: could not prepare the transaction over ${rpcHost(config.rpcUrl)} (${errorClass(error)}). Nothing was sent.`);
+      return { exitCode: 4, outcome: "chain-error" };
+    }
+    writeJournalEntry(config.projectDir, brief.id, { hash: prepared.hash, raw: prepared.raw, nonce: Number(nonce) });
+    return await sendAndAwait({ config, chain, wallet, mida, log, now, delegation, brief, signed: { ...prepared, nonce: Number(nonce) }, recovery: false });
+  } finally {
+    lock.release();
+  }
 }

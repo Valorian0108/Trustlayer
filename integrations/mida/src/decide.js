@@ -24,6 +24,10 @@ export function noDelegationLine({ owner, agent }) {
   return `trustlayer: no valid delegation from ${shortAddr(owner)} to ${shortAddr(agent)} on the DelegationRegistry (revoked, expired or never created). Nothing was sent.`;
 }
 
+export function alreadyDoneLine(receipt, briefId) {
+  return `already done: receipt ${shortId(receipt.id)} for brief ${shortId(briefId)} exists (tx ${receipt.content.tx?.hash}). Nothing was sent.`;
+}
+
 export function decide({ delegation, brief, receipts, balanceWei, gasPriceWei, agentName }) {
   if (!delegation.valid) {
     return {
@@ -38,7 +42,7 @@ export function decide({ delegation, brief, receipts, balanceWei, gasPriceWei, a
     return {
       kind: "already-done",
       receipt,
-      line: `already done: receipt ${shortId(receipt.id)} for brief ${shortId(brief.id)} exists (tx ${receipt.content.tx?.hash}). Nothing was sent.`,
+      line: alreadyDoneLine(receipt, brief.id),
     };
   }
 

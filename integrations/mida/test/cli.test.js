@@ -24,7 +24,8 @@ describe("createWallet", () => {
     const agentAddress = privateKeyToAccount(key).address;
     const wallet = createWallet({ agentPrivateKey: key, agentAddress, rpcUrl: "https://testnet-rpc.monad.xyz" });
     expect(wallet.account.address).toBe(agentAddress);
-    expect(typeof wallet.sendTransaction).toBe("function");
+    expect(typeof wallet.signTransfer).toBe("function");
+    expect(typeof wallet.sendRawTransaction).toBe("function");
     expect(typeof wallet.waitForTransactionReceipt).toBe("function");
   });
 });

@@ -1,0 +1,116 @@
+import fs from "node:fs";
+import path from "node:path";
+
+// The lock and the journal live in the project folder (config.projectDir).
+// The lock keeps one run per folder at a time; the journal records a signed
+// transaction before it is broadcast so a crashed or cut-off run can re-send
+// the exact same bytes — the same nonce means it can never pay twice.
+
+const LOCK_FILE = ".trustlayer-run.lock";
+const JOURNAL_FILE = ".trustlayer-journal.json";
+
+export class LockHeldError extends Error {
+  constructor(pid) {
+    super(`another run is in progress (pid ${pid})`);
+    this.name = "LockHeldError";
+    this.pid = pid;
+  }
+}
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM means the pid exists but belongs to another user — still alive
+    return error?.code === "EPERM";
+  }
+}
+
+function readLockPid(file) {
+  try {
+    const pid = Number.parseInt(fs.readFileSync(file, "utf8").trim(), 10);
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+export function acquireLock(dir) {
+  const file = path.join(dir, LOCK_FILE);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const fd = fs.openSync(file, "wx"); // O_EXCL — fails if the file exists
+      try {
+        fs.writeFileSync(fd, `${process.pid}\n`);
+      } finally {
+        fs.closeSync(fd);
+      }
+      let released = false;
+      return {
+        release() {
+          if (released) return;
+          released = true;
+          try {
+            fs.unlinkSync(file);
+          } catch {
+            // already gone — nothing to release
+          }
+        },
+      };
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+      const pid = readLockPid(file);
+      if (pid !== null && pidAlive(pid)) throw new LockHeldError(pid);
+      // the holder is dead or the file is unreadable — take the lock over
+      try {
+        fs.unlinkSync(file);
+      } catch (unlinkError) {
+        if (unlinkError.code !== "ENOENT") throw unlinkError;
+      }
+    }
+  }
+  // someone else won the race between our unlink and our create
+  throw new LockHeldError(readLockPid(file) ?? -1);
+}
+
+// Journal shape: { [briefId]: { hash, raw, nonce } }. A corrupt journal is
+// never ignored — it throws, the run exits before any send, and the owner
+// fixes or removes it by hand.
+export function readJournal(dir) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(dir, JOURNAL_FILE), "utf8"));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    if (error.code === "ENOENT") return {};
+    throw error;
+  }
+}
+
+function writeJournal(dir, journal) {
+  const fd = fs.openSync(path.join(dir, JOURNAL_FILE), "w");
+  try {
+    fs.writeFileSync(fd, JSON.stringify(journal, null, 2) + "\n");
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+export function writeJournalEntry(dir, briefId, entry) {
+  const journal = readJournal(dir);
+  journal[briefId] = entry;
+  writeJournal(dir, journal);
+}
+
+export function removeJournalEntry(dir, briefId) {
+  const journal = readJournal(dir);
+  if (!Object.hasOwn(journal, briefId)) return;
+  delete journal[briefId];
+  const file = path.join(dir, JOURNAL_FILE);
+  if (Object.keys(journal).length === 0) {
+    fs.unlinkSync(file);
+    return;
+  }
+  writeJournal(dir, journal);
+}
