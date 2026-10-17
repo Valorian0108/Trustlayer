@@ -653,15 +653,13 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
         });
         
         // For hackathon demo, fallback to simulation after showing the error
+        // Simulation is visibly labeled — no fake transaction hash is shown as real.
         setTimeout(() => {
-          const simulatedHash = '0x' + Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 6);
-          
           setDelegationActive(true);
           pushFeed({
-            kind: 'success',
-            title: 'Agent delegation active (demo mode)',
-            detail: `Agent may act up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}. Using simulation for demo reliability.`,
-            transactionHash: simulatedHash
+            kind: 'info',
+            title: 'Agent delegation active (demo simulation)',
+            detail: `Agent may act up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}. This is a simulation — no real on-chain transaction was sent.`,
           });
         }, 2000);
       }
@@ -839,14 +837,14 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
           }
         }
 
-        // Simulate proof generation
+        // Simulate proof generation (demo only — no real on-chain call)
         await new Promise(resolve => setTimeout(resolve, 1500));
         
         setVerificationPhase('verify');
         pushFeed({
           kind: 'pending',
-          title: 'Verifying authorization on-chain',
-          detail: 'Processing ZK proof verification for delegation authorization...',
+          title: 'Verifying authorization (demo simulation)',
+          detail: 'This is a simulation — no real proof is being submitted on-chain.',
         });
         
         // Query actual delegation data for context (optional, shows system works)
@@ -862,18 +860,14 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
           console.log('Delegation query failed, proceeding with simulation');
         }
         
-        // Simulate ZK proof verification processing time
+        // Simulate ZK proof verification processing time (demo only)
         await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Generate demo transaction hash for the complete flow
-        const simulatedHash = '0x' + Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 6);
         
         setVerificationPhase('approved');
         pushFeed({
-          kind: 'success',
-          title: 'Large purchase approved',
-          detail: '$500 action · Authorization verified via ZK proof system (demo implementation)',
-          transactionHash: simulatedHash
+          kind: 'info',
+          title: 'Large purchase approved (demo simulation)',
+          detail: '$500 action · This is a simulation — no real on-chain verification occurred. Configure VITE_AUTHORIZATION_VERIFIER_V2_ADDRESS for real verification.',
         });
         
         setTimeout(() => setVerificationPhase('idle'), 2400);
