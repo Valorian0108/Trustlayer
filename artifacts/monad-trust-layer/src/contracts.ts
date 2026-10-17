@@ -1,4 +1,5 @@
 import { ethers } from 'ethers';
+import { buildMerkleTree, delegationLeaf, type MerkleTree } from './zk/merkle';
 
 // Fallback simulation function for when Privy is not available
 export function simulateContractCall(type: 'delegation' | 'verification') {
@@ -273,6 +274,118 @@ export async function verifyAuthorizationWithPrivy(
 ): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
   // This function is now handled directly in App.tsx
   return { success: false, error: 'Use direct wallet.sendTransaction in App.tsx' };
+}
+
+// ============================================================================
+// AuthorizationVerifierV2 — real on-chain Merkle verification (Step 1 rebuild)
+// ----------------------------------------------------------------------------
+// ADDITIVE SECTION: nothing above is modified. This whole layer is switched on
+// only when VITE_AUTHORIZATION_VERIFIER_V2_ADDRESS is set to a valid address;
+// otherwise the app behaves exactly as before (demo simulation).
+// See .build/DECISIONS.md (local) and contracts/AuthorizationVerifierV2.sol.
+// ============================================================================
+
+export const VERIFIER_V2_ADDRESS = import.meta.env.VITE_AUTHORIZATION_VERIFIER_V2_ADDRESS as string | undefined;
+export const verifierV2Ready = Boolean(
+  VERIFIER_V2_ADDRESS && /^0x[0-9a-fA-F]{40}$/.test(VERIFIER_V2_ADDRESS)
+);
+
+export const VERIFIER_V2_ABI = [
+  'function commitRoot(bytes32 root)',
+  'function getOwnerRoot(address owner) view returns (bytes32)',
+  'function leafFor(address owner, uint256 delegationId, address agent, uint8 tier, uint256 expiresAt) view returns (bytes32)',
+  'function checkAuthorization(tuple(address owner, uint256 delegationId, address agent, uint8 tier, uint256 expiresAt, uint8 minTier, uint256 nullifierHash) claim, bytes32[] proof) view returns (bool)',
+  'function verifyAuthorization(tuple(address owner, uint256 delegationId, address agent, uint8 tier, uint256 expiresAt, uint8 minTier, uint256 nullifierHash) claim, bytes32[] proof) returns (bool)',
+  'function isNullifierUsed(uint256 nullifierHash) view returns (bool)',
+  'event RootCommitted(address indexed owner, bytes32 root)',
+  'event AuthorizationVerified(uint256 indexed delegationId, address indexed agent, uint256 nullifierHash, uint8 tier, uint256 timestamp)'
+];
+
+// Read-only view of the EXISTING deployed DelegationRegistry (never modified).
+const REGISTRY_READ_ABI = [
+  'function getOwnerDelegations(address owner) view returns (uint256[])',
+  'function getDelegation(uint256 delegationId) view returns (tuple(address owner, address agent, uint8 tier, uint256 createdAt, uint256 expiresAt, bool active, bool revoked))',
+  'function checkAgentDelegation(address owner, address agent) view returns (bool hasValidDelegation, uint256 delegationId, uint8 tier)'
+];
+
+export interface ApprovalSetDelegation {
+  delegationId: bigint;
+  owner: string;
+  agent: string;
+  tier: number;
+  expiresAt: bigint;
+}
+
+export interface AuthorizationClaimV2 {
+  owner: string;
+  delegationId: bigint;
+  agent: string;
+  tier: number;
+  expiresAt: bigint;
+  minTier: number;
+  nullifierHash: bigint;
+}
+
+export function getTestnetProvider(): ethers.JsonRpcProvider {
+  return new ethers.JsonRpcProvider(MONAD_TESTNET_RPC);
+}
+
+/**
+ * Build the owner's approval set from the registry (source of truth):
+ * all of the owner's delegations, ordered by delegationId, as a Merkle tree.
+ * The root is what the owner commits to AuthorizationVerifierV2.commitRoot,
+ * and inclusion proofs from this tree are what verifyAuthorization checks.
+ */
+export async function buildOwnerApprovalSet(ownerAddress: string): Promise<{
+  delegations: ApprovalSetDelegation[];
+  leaves: string[];
+  tree: MerkleTree;
+}> {
+  const provider = getTestnetProvider();
+  const registry = new ethers.Contract(
+    DELEGATION_REGISTRY_ADDRESS || '',
+    REGISTRY_READ_ABI,
+    provider
+  );
+  const ids: bigint[] = await registry.getOwnerDelegations(ownerAddress);
+  const delegations: ApprovalSetDelegation[] = [];
+  for (const id of ids) {
+    const d = await registry.getDelegation(id);
+    delegations.push({
+      delegationId: id,
+      owner: d.owner,
+      agent: d.agent,
+      tier: Number(d.tier),
+      expiresAt: d.expiresAt
+    });
+  }
+  delegations.sort((a, b) => Number(a.delegationId - b.delegationId));
+  const leaves = delegations.map(delegationLeaf);
+  const tree = buildMerkleTree(leaves);
+  return { delegations, leaves, tree };
+}
+
+/** Encode a commitRoot(root) call for AuthorizationVerifierV2. */
+export function encodeCommitRoot(root: string): string {
+  const iface = new ethers.Interface(VERIFIER_V2_ABI);
+  return iface.encodeFunctionData('commitRoot', [root]);
+}
+
+/** Encode a verifyAuthorization(claim, proof) call for AuthorizationVerifierV2. */
+export function encodeVerifyAuthorizationV2(claim: AuthorizationClaimV2, proof: string[]): string {
+  const iface = new ethers.Interface(VERIFIER_V2_ABI);
+  return iface.encodeFunctionData('verifyAuthorization', [
+    [
+      claim.owner,
+      claim.delegationId,
+      claim.agent,
+      claim.tier,
+      claim.expiresAt,
+      claim.minTier,
+      claim.nullifierHash
+    ],
+    proof
+  ]);
 }
 
 

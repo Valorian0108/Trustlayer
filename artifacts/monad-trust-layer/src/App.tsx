@@ -43,7 +43,8 @@ import {
   useLocation,
   Router as WouterRouter,
 } from 'wouter';
-import { getContractAddresses, createDelegationSignature, verifyAuthorizationSignature, getEmbeddedWallet, queryDelegationData, generateProofDataFromDelegation } from './contracts';
+import { getContractAddresses, createDelegationSignature, verifyAuthorizationSignature, getEmbeddedWallet, queryDelegationData, generateProofDataFromDelegation, VERIFIER_V2_ADDRESS, verifierV2Ready, VERIFIER_V2_ABI, buildOwnerApprovalSet, encodeCommitRoot, encodeVerifyAuthorizationV2, type AuthorizationClaimV2 } from './contracts';
+import { getMerkleProof, nullifierFor, makeActionScope } from './zk/merkle';
 import { ethers } from 'ethers';
 import { defineChain } from 'viem';
 
@@ -195,6 +196,17 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
   const [contractsReady, setContractsReady] = useState(false);
   const [useRealTransactions, setUseRealTransactions] = useState(false);
   const [agentWallet, setAgentWallet] = useState<{ address: string; connected: boolean } | null>(null);
+  // Step 1 (V2) state: the on-chain delegation the agent will prove, and the
+  // owner's committed approval-set root. Both stay null unless V2 is configured
+  // and the real flow succeeded — existing demo behavior is untouched otherwise.
+  const [activeDelegation, setActiveDelegation] = useState<{
+    delegationId: bigint;
+    owner: string;
+    agent: string;
+    tier: number;
+    expiresAt: bigint;
+  } | null>(null);
+  const [ownerRoot, setOwnerRoot] = useState<string | null>(null);
   const [feed, setFeed] = useState<FeedItem[]>([
     {
       id: 'ready',
@@ -536,6 +548,70 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
           detail: `Delegation committed to Monad testnet · up to ${selectedTier === 'elevated' ? '$500' : selectedTier === 'routine' ? '$50' : '$5'}.`,
           transactionHash: hash
         });
+
+        // --- Step 1 (V2): commit the owner's approval-set root -----------------
+        // Gated: only runs when VITE_AUTHORIZATION_VERIFIER_V2_ADDRESS is set.
+        // Failure here never breaks the delegation flow above — the high-stakes
+        // action simply falls back to demo verification.
+        if (verifierV2Ready) {
+          void (async () => {
+            try {
+              pushFeed({
+                kind: 'pending',
+                title: 'Committing approval set',
+                detail: 'Waiting for delegation confirmation, then committing the Merkle root to AuthorizationVerifierV2...',
+              });
+              const provider = new ethers.JsonRpcProvider('https://testnet-rpc.monad.xyz');
+              await provider.waitForTransaction(hash);
+              const registryRead = new ethers.Contract(
+                import.meta.env.VITE_DELEGATION_REGISTRY_ADDRESS || '',
+                [
+                  'function checkAgentDelegation(address owner, address agent) view returns (bool hasValidDelegation, uint256 delegationId, uint8 tier)',
+                  'function getDelegation(uint256 delegationId) view returns (tuple(address owner, address agent, uint8 tier, uint256 createdAt, uint256 expiresAt, bool active, bool revoked))'
+                ],
+                provider
+              );
+              const found = await registryRead.checkAgentDelegation(wallet.address, agentAddress);
+              if (!found.hasValidDelegation) {
+                throw new Error('Delegation not visible on-chain after confirmation');
+              }
+              const registered = await registryRead.getDelegation(found.delegationId);
+              setActiveDelegation({
+                delegationId: found.delegationId,
+                owner: wallet.address,
+                agent: agentAddress,
+                tier: Number(registered.tier),
+                expiresAt: registered.expiresAt
+              });
+
+              const approvalSet = await buildOwnerApprovalSet(wallet.address);
+              const rootTx = await sendTransaction(
+                {
+                  to: VERIFIER_V2_ADDRESS,
+                  data: encodeCommitRoot(approvalSet.tree.root),
+                  value: '0x0',
+                  gas: '0x1E8480' // 2,000,000 — commitRoot is cheap; headroom for testnet
+                },
+                { address: wallet.address, uiOptions: { showWalletUIs: false } }
+              );
+              await provider.waitForTransaction(rootTx.hash);
+              setOwnerRoot(approvalSet.tree.root);
+              pushFeed({
+                kind: 'success',
+                title: 'Approval set committed on-chain',
+                detail: `${approvalSet.delegations.length} delegation leaf${approvalSet.delegations.length === 1 ? '' : 's'} · Merkle root ${approvalSet.tree.root.slice(0, 10)}… is now enforced by AuthorizationVerifierV2.`,
+                transactionHash: rootTx.hash
+              });
+            } catch (rootError) {
+              console.error('Approval-set commit failed:', rootError);
+              pushFeed({
+                kind: 'error',
+                title: 'Approval-set commit failed',
+                detail: `${rootError instanceof Error ? rootError.message : 'Unknown error'} — high-stakes flow will use demo verification.`
+              });
+            }
+          })();
+        }
       } catch (txError) {
         console.error('Transaction failed with error:', txError);
         console.error('Error details:', {
@@ -601,13 +677,40 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
     }
   };
 
-  const runSmallAction = () => {
+  const runSmallAction = async () => {
     if (!delegationActive) return;
     pushFeed({
       kind: 'success',
       title: 'Small purchase auto-approved',
       detail: '$3 action · no proof requested.',
     });
+    // Step 1: settle the small action on Monad testnet when an agent wallet is
+    // connected. Purely additive — any failure keeps the feed-only demo behavior.
+    if (agentManager.isConnected()) {
+      try {
+        const agent = agentManager.getAgent();
+        const ownerWallet = wallets && wallets.length > 0 ? getEmbeddedWallet(wallets) : null;
+        const recipient = ownerWallet?.address ?? agent?.address;
+        if (agent && recipient) {
+          const tx = await agentManager.sendTransaction({
+            to: recipient,
+            data: '0x',
+            value: ethers.toBeHex(ethers.parseEther('0.0001')),
+            gasLimit: '0x5208' // 21,000 — plain transfer
+          });
+          if (tx.success && tx.transactionHash) {
+            pushFeed({
+              kind: 'success',
+              title: 'Settled on Monad testnet',
+              detail: '$3 purchase settled as a 0.0001 MON micro-transfer from the agent wallet · within delegated authority, no proof required.',
+              transactionHash: tx.transactionHash
+            });
+          }
+        }
+      } catch (smallTxError) {
+        console.warn('Small-action settlement skipped:', smallTxError);
+      }
+    }
   };
 
   const runHighAction = async () => {
@@ -630,7 +733,93 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
       title: 'Large purchase paused for authorization proof',
       detail: 'Generating authorization proof for Monad testnet verification...',
     });
-    
+
+    // --- Step 1 (V2): real on-chain Merkle-proof verification ----------------
+    // Gated: needs V2 configured + a confirmed delegation + committed root +
+    // connected agent wallet. On ANY failure this falls through to the
+    // existing demo flow below — the demo can never break.
+    if (verifierV2Ready && activeDelegation && ownerRoot && agentManager.isConnected()) {
+      try {
+        const approvalSet = await buildOwnerApprovalSet(activeDelegation.owner);
+        if (approvalSet.tree.root.toLowerCase() !== ownerRoot.toLowerCase()) {
+          throw new Error('Committed root is stale — the approval set changed on-chain. Reset and re-create the delegation.');
+        }
+        const leafIndex = approvalSet.delegations.findIndex(
+          (d) => d.delegationId === activeDelegation.delegationId
+        );
+        if (leafIndex === -1) {
+          throw new Error('Active delegation missing from the approval set (revoked or replaced?)');
+        }
+        const proof = getMerkleProof(approvalSet.tree, leafIndex);
+
+        setVerificationPhase('verify');
+        pushFeed({
+          kind: 'pending',
+          title: 'Verifying authorization on-chain',
+          detail: 'Submitting a real Merkle inclusion proof to AuthorizationVerifierV2 via the agent wallet...',
+        });
+
+        const claim: AuthorizationClaimV2 = {
+          owner: activeDelegation.owner,
+          delegationId: activeDelegation.delegationId,
+          agent: activeDelegation.agent,
+          tier: activeDelegation.tier,
+          expiresAt: activeDelegation.expiresAt,
+          minTier: 2, // Elevated — required for the $500 action
+          nullifierHash: nullifierFor(
+            activeDelegation.delegationId,
+            activeDelegation.agent,
+            makeActionScope('high-stakes-purchase')
+          )
+        };
+
+        // Read-only pre-check so failures produce a clear message before spending gas.
+        const provider = new ethers.JsonRpcProvider('https://testnet-rpc.monad.xyz');
+        const verifier = new ethers.Contract(VERIFIER_V2_ADDRESS || '', VERIFIER_V2_ABI, provider);
+        const preCheck = await verifier.checkAuthorization(
+          [claim.owner, claim.delegationId, claim.agent, claim.tier, claim.expiresAt, claim.minTier, claim.nullifierHash],
+          proof
+        );
+        if (!preCheck) {
+          throw new Error('Verifier pre-check rejected the proof (tier, expiry, membership, or registry mismatch)');
+        }
+
+        const tx = await agentManager.sendTransaction({
+          to: VERIFIER_V2_ADDRESS || '',
+          data: encodeVerifyAuthorizationV2(claim, proof),
+          value: '0x0',
+          gasLimit: '0x1E8480' // 2,000,000
+        });
+        if (!tx.success || !tx.transactionHash) {
+          throw new Error(tx.error || 'Agent wallet rejected the verification transaction');
+        }
+
+        const receipt = await provider.waitForTransaction(tx.transactionHash);
+        if (receipt && receipt.status === 0) {
+          throw new Error('Verification transaction reverted on-chain');
+        }
+
+        setVerificationPhase('approved');
+        pushFeed({
+          kind: 'success',
+          title: 'Large purchase approved',
+          detail: '$500 action · Merkle proof verified on-chain by AuthorizationVerifierV2 · nullifier consumed (replay-protected).',
+          transactionHash: tx.transactionHash
+        });
+        setTimeout(() => setVerificationPhase('idle'), 2400);
+        return;
+      } catch (v2Error) {
+        console.error('V2 on-chain verification failed:', v2Error);
+        setVerificationPhase('proof');
+        pushFeed({
+          kind: 'info',
+          title: 'On-chain verification unavailable',
+          detail: `${v2Error instanceof Error ? v2Error.message : 'Unknown error'} — falling back to demo verification.`
+        });
+        // fall through to the existing demo flow below
+      }
+    }
+
     if (contractsReady && useRealTransactions) {
       try {
         // Check if agent wallet is on correct network
@@ -716,6 +905,10 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
     setDelegationActive(false);
     setSelectedTier('elevated');
     setVerificationPhase('idle');
+    // Step 1 (V2): clear local proof state. On-chain delegation/root persist;
+    // re-authorizing creates a fresh delegation and re-commits the root.
+    setActiveDelegation(null);
+    setOwnerRoot(null);
     setFeed([
       {
         id: 'reset',
@@ -1092,7 +1285,7 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
                         {verificationPhase === 'proof' &&
                           ' · agent is waiting, not acting.'}
                         {verificationPhase === 'verify' &&
-                          ' · ZK proof verification in progress...'}
+                          ' · authorization proof verification in progress...'}
                         {verificationPhase === 'approved' &&
                           ' · action may proceed.'}
                         {verificationPhase === 'blocked' &&
