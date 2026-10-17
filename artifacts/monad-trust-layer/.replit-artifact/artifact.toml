@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Monad Trust Layer"
+description = "A single-screen trust dashboard for AI agents that lets low-stakes actions pass instantly and requires privacy-preserving authorization proof for high-stakes actions. Built for the Monad ecosystem hackathon."
+version = "1.0.0"
+id = "artifacts/monad-trust-layer"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24795
+
+[services.development]
+run = "pnpm --filter @workspace/monad-trust-layer run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/monad-trust-layer", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/monad-trust-layer/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24795"
+BASE_PATH = "/"
