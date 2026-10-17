@@ -585,15 +585,18 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
               });
 
               const approvalSet = await buildOwnerApprovalSet(wallet.address);
-              const rootTx = await sendTransaction(
-                {
-                  to: VERIFIER_V2_ADDRESS,
-                  data: encodeCommitRoot(approvalSet.tree.root),
-                  value: '0x0',
-                  gas: '0x1E8480' // 2,000,000 — commitRoot is cheap; headroom for testnet
-                },
-                { address: wallet.address, uiOptions: { showWalletUIs: false } }
-              );
+              // Same txData-const pattern as the delegation call above (keeps tsc happy
+              // with Privy's sendTransaction typing while passing identical fields).
+              const rootTxData = {
+                to: VERIFIER_V2_ADDRESS,
+                data: encodeCommitRoot(approvalSet.tree.root),
+                value: '0x0',
+                gas: '0x1E8480' // 2,000,000 — commitRoot is cheap; headroom for testnet
+              };
+              const rootTx = await sendTransaction(rootTxData, {
+                address: wallet.address,
+                uiOptions: { showWalletUIs: false }
+              });
               await provider.waitForTransaction(rootTx.hash);
               setOwnerRoot(approvalSet.tree.root);
               pushFeed({
