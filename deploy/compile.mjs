@@ -14,7 +14,9 @@ const CONTRACTS_DIR = resolve(__dirname, "..", "contracts");
 const OUT_DIR = join(__dirname, "out");
 
 // Contracts to compile. Add new ones here (additive only).
-const TARGETS = ["AuthorizationVerifierV2.sol"];
+// DelegationRegistry is compiled for LOCAL TESTS only — the deployed one on
+// Monad testnet is never touched (see .build/DECISIONS.md D4).
+const TARGETS = ["AuthorizationVerifierV2.sol", "DelegationRegistry.sol"];
 
 function findImports(path) {
   // @openzeppelin imports -> resolve from this folder's node_modules

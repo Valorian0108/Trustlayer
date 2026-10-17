@@ -61,3 +61,5 @@ Thumbs.db
 # deployment.json (the record of what was deployed where) IS committed.
 deploy/out/*
 !deploy/out/deployment.json
+deploy/hardhat-artifacts/
+deploy/hardhat-cache/
