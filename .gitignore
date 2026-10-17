@@ -56,3 +56,8 @@ Thumbs.db
 
 # Vercel
 .vercel
+
+# Trust Layer deploy tooling: compiled artifacts are regenerable (node compile.mjs);
+# deployment.json (the record of what was deployed where) IS committed.
+deploy/out/*
+!deploy/out/deployment.json

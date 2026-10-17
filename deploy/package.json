@@ -1,0 +1,19 @@
+{
+  "name": "trustlayer-deploy",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone compile + deploy tooling for Trust Layer contracts. Deliberately OUTSIDE the pnpm workspace so it can never disturb the existing app build.",
+  "scripts": {
+    "compile": "node compile.mjs",
+    "deploy:verifier-v2": "node deploy.mjs",
+    "test:merkle": "tsx test-merkle.ts",
+    "smoke": "tsx smoke-test.mjs"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.1.0",
+    "ethers": "^6.13.0",
+    "solc": "0.8.28",
+    "tsx": "^4.21.0"
+  }
+}
