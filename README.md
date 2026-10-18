@@ -243,7 +243,7 @@ Future versions may add privacy-preserving verification. This prototype focuses 
 The intended model is:
 
 ```text
-Private authorization information
+Owner delegates to agent
               ↓
       Verifier checks tier, expiry, revocation
               ↓
@@ -514,6 +514,12 @@ EXECUTION
 0xEc1d82473aCC8AE1BC1F9B0D79C9dd8a2ee6cFaF
 ```
 
+### AuthorizationVerifierV2
+
+```text
+0x82912805399B9924b6F0aF9360FBd9f91a5Fb6c7
+```
+
 ---
 
 # Tech Stack
@@ -582,6 +588,8 @@ VITE_PRIVY_APP_ID=
 VITE_DELEGATION_REGISTRY_ADDRESS=
 
 VITE_AUTHORIZATION_VERIFIER_ADDRESS=
+
+VITE_AUTHORIZATION_VERIFIER_V2_ADDRESS=
 ```
 
 ## Requirements
