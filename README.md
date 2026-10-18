@@ -141,11 +141,10 @@ The following components are currently live:
 
 The following remains simulated in the current prototype:
 
-final anonymous ZK proof generation;
+- Privacy-preserving zero-knowledge proof generation
+- Full anonymous on-chain proof verification
 
-full anonymous on-chain proof verification.
-
-The prototype demonstrates the architecture, user experience, and permission boundary. The full cryptographic proof layer remains part of the roadmap.
+The prototype demonstrates deterministic, tier-based authorization on Monad testnet. Real Merkle-proof verification against AuthorizationVerifierV2 is live when `VITE_AUTHORIZATION_VERIFIER_V2_ADDRESS` is configured.
 
 ---
 
@@ -239,7 +238,7 @@ The authorization requirement increases with the risk of the action.
 
 Higher-risk actions require stronger evidence that the human owner authorized the action.
 
-The production direction is privacy-preserving cryptographic verification using zero-knowledge proofs.
+Future versions may add privacy-preserving verification. This prototype focuses on the authorization architecture and risk routing.
 
 The intended model is:
 
@@ -401,7 +400,7 @@ This is the core idea behind proportional authorization.
                               ┌────────┴────────┐
                               │                 │
                               ▼                 ▼
-                           ZK Proof           Reject
+                           VERIFY           Reject
                               │
                               ▼
                         MONAD TESTNET
@@ -409,19 +408,13 @@ This is the core idea behind proportional authorization.
 
 ---
 
-# Why Zero-Knowledge Proofs?
+# Future: Privacy-Preserving Verification (Roadmap)
 
-For high-stakes actions, simply saying:
+For high-stakes actions, the current build proves authorization deterministically — tier, expiry, revocation, and replay protection are all checked on-chain via Merkle proofs.
 
-> "The owner authorized this."
+A future version may add zero-knowledge proofs to prove authorization conditions without revealing the owner's identity. That privacy layer is not part of this prototype.
 
-is not enough.
-
-The system should eventually be able to prove that the required authorization conditions were satisfied without unnecessarily exposing the owner's identity or private authorization information.
-
-This is where zero-knowledge proofs fit into Trust Layer.
-
-The current implementation establishes the authorization architecture and demonstrates the high-stakes verification flow. The complete anonymous ZK proof generation and on-chain verification remain part of the roadmap.
+The current implementation establishes the authorization architecture and demonstrates the high-stakes verification flow. Anonymous ZK proof generation and on-chain verification remain part of the roadmap.
 
 ---
 # Why Monad Chain?
