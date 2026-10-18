@@ -1066,7 +1066,7 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
         <aside className="trust-sidebar">
           <div className="brand-lockup" data-testid="brand-monad-trust-layer">
             <div className="brand-mark" aria-hidden="true">
-              <img src="../../../assets/logo.jpg" alt="Trust Layer Logo" width="32" height="32" />
+              <ShieldCheck size={16} />
             </div>
             <div>
               <div className="brand-name">Monad Trust Layer</div>
