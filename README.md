@@ -152,6 +152,19 @@ Only the privacy layer is simulated in the current prototype:
 
 Everything else — delegation, Merkle-proof authorization, replay protection, and execution gating — runs on Monad Testnet. Real Merkle-proof verification against AuthorizationVerifierV2 is live when `VITE_AUTHORIZATION_VERIFIER_V2_ADDRESS` is configured.
 
+## Verified On-Chain (Live)
+
+This activity log is from a live run on Monad Testnet. The agent's $500 action was authorized by `AuthorizationVerifierV2` — a real Merkle inclusion proof verified on-chain, with the nullifier consumed so the same proof cannot be replayed — and only then executed.
+
+![Trust Layer activity log: on-chain verification and gated execution](assets/screenshots/activity-log.png)
+
+| Step | On-chain transaction |
+| ---- | -------------------- |
+| Verification (`verifyAuthorization`) | [`0x7a9bc7de4f2cee3e62f13cf5d33efbaa606adfc3a298803e513b70b48e017783`](https://testnet.monadscan.com/tx/0x7a9bc7de4f2cee3e62f13cf5d33efbaa606adfc3a298803e513b70b48e017783) |
+| Gated execution | [`0xf1ab5f0f5a6479ba492076c103cefd30264c4103c07c4f0ace3f3d3bbf79914f`](https://testnet.monadscan.com/tx/0xf1ab5f0f5a6479ba492076c103cefd30264c4103c07c4f0ace3f3d3bbf79914f) |
+
+Both transactions settled successfully against [`AuthorizationVerifierV2`](https://testnet.monadscan.com/address/0x82912805399B9924b6F0aF9360FBd9f91a5Fb6c7) on Monad Testnet.
+
 ---
 
 
