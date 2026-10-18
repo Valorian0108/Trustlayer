@@ -88,25 +88,40 @@ class MetaMaskAgentManager {
         return { success: false, error: 'EVM wallet not available' };
       }
 
+      // `from` is required by the JSON-RPC spec for eth_sendTransaction.
+      // MetaMask defaults to the selected account, but Rabby and other wallets
+      // throw "Cannot read properties of undefined (reading 'toLowerCase')"
+      // when it is missing — so always send it explicitly.
+      const txParams: Record<string, string> = {
+        from: this.agent.address,
+        to: transaction.to,
+        data: transaction.data,
+        value: transaction.value || '0x0',
+      };
+      if (transaction.gasLimit) {
+        txParams.gas = transaction.gasLimit;
+      }
+
       const txHash = await ethereum.request({
         method: 'eth_sendTransaction',
-        params: [{
-          to: transaction.to,
-          data: transaction.data,
-          value: transaction.value || '0x0',
-          gas: transaction.gasLimit,
-        }],
+        params: [txParams],
       });
 
       return { 
         success: true, 
         transactionHash: txHash 
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Agent transaction failed:', error);
+      // Wallets throw plain objects ({ code, message, data }), not Error
+      // instances — surface the real message so failures are diagnosable.
+      const message =
+        error?.message ||
+        error?.data?.message ||
+        (typeof error === 'string' ? error : 'Transaction failed');
       return { 
         success: false, 
-        error: error instanceof Error ? error.message : 'Transaction failed' 
+        error: message 
       };
     }
   }
