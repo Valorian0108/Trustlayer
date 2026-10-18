@@ -207,6 +207,14 @@ function Home({ privyConfigured }: { privyConfigured: boolean }) {
     expiresAt: bigint;
   } | null>(null);
   const [ownerRoot, setOwnerRoot] = useState<string | null>(null);
+  // Phase E — execution boundary: a real verification receipt must exist before
+  // the high-stakes action can execute. The UI cannot "prove" authorization
+  // without a real on-chain receipt; demo simulation never sets this.
+  const [lastVerifiedReceipt, setLastVerifiedReceipt] = useState<{
+    transactionHash: string;
+    status: number;
+  } | null>(null);
+  const [actionExecuted, setActionExecuted] = useState(false);
   const [feed, setFeed] = useState<FeedItem[]>([
     {
       id: 'ready',
@@ -728,6 +736,18 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
       return;
     }
 
+    // Phase E — execution boundary: if the action was already executed after
+    // a real verification, block re-authorization until reset.
+    if (actionExecuted) {
+      setVerificationPhase('blocked');
+      pushFeed({
+        kind: 'blocked',
+        title: 'Action already executed',
+        detail: 'The high-stakes action has already been executed. Reset the flow to authorize a new action.',
+      });
+      return;
+    }
+
     setVerificationPhase('proof');
     pushFeed({
       kind: 'pending',
@@ -796,18 +816,22 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
         }
 
         const receipt = await provider.waitForTransaction(tx.transactionHash);
-        if (receipt && receipt.status === 0) {
+        if (!receipt || receipt.status === null) {
+          throw new Error('Verification transaction receipt not found');
+        }
+        if (receipt.status === 0) {
           throw new Error('Verification transaction reverted on-chain');
         }
 
         setVerificationPhase('approved');
+        setLastVerifiedReceipt({ transactionHash: tx.transactionHash, status: receipt.status });
+        setActionExecuted(false);
         pushFeed({
           kind: 'success',
-          title: 'Large purchase approved',
-          detail: '$500 action · Merkle proof verified on-chain by AuthorizationVerifierV2 · nullifier consumed (replay-protected).',
+          title: 'Large purchase authorized',
+          detail: '$500 action · Merkle proof verified on-chain by AuthorizationVerifierV2 · nullifier consumed (replay-protected). Ready to execute.',
           transactionHash: tx.transactionHash
         });
-        setTimeout(() => setVerificationPhase('idle'), 2400);
         return;
       } catch (v2Error) {
         console.error('V2 on-chain verification failed:', v2Error);
@@ -896,6 +920,71 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
     }
   };
 
+  // Phase E — execution boundary: performs the actual high-stakes action
+  // (a real on-chain micro-transfer from the agent wallet). Only enabled when
+  // a real V2 verification receipt exists and the action hasn't been executed yet.
+  // This ensures the agent cannot bypass authorization — the action executes
+  // only after the contract has confirmed it.
+  const executeHighAction = async () => {
+    if (!lastVerifiedReceipt || actionExecuted) return;
+
+    if (!agentManager.isConnected()) {
+      pushFeed({
+        kind: 'blocked',
+        title: 'Agent wallet not connected',
+        detail: 'Connect your agent wallet (MetaMask/Rabby) to execute the action.',
+      });
+      return;
+    }
+
+    pushFeed({
+      kind: 'pending',
+      title: 'Executing large purchase',
+      detail: 'Settling $500 action on-chain from the agent wallet after verified authorization...',
+    });
+
+    try {
+      const agent = agentManager.getAgent();
+      const ownerWallet = wallets && wallets.length > 0 ? getEmbeddedWallet(wallets) : null;
+      const recipient = ownerWallet?.address ?? agent?.address;
+
+      if (!agent || !recipient) {
+        throw new Error('Agent wallet or recipient address not available');
+      }
+
+      const tx = await agentManager.sendTransaction({
+        to: recipient,
+        data: '0x',
+        value: ethers.toBeHex(ethers.parseEther('0.0001')),
+        gasLimit: '0x5208', // 21,000 — plain transfer
+      });
+
+      if (!tx.success || !tx.transactionHash) {
+        throw new Error(tx.error || 'Agent wallet rejected the execution transaction');
+      }
+
+      const provider = new ethers.JsonRpcProvider('https://testnet-rpc.monad.xyz');
+      const receipt = await provider.waitForTransaction(tx.transactionHash);
+
+      setActionExecuted(true);
+      setVerificationPhase('idle');
+
+      pushFeed({
+        kind: 'success',
+        title: 'Large purchase executed',
+        detail: `$500 action settled as a 0.0001 MON transfer from agent wallet · authorized by V2 tx ${lastVerifiedReceipt.transactionHash}.`,
+        transactionHash: tx.transactionHash,
+      });
+    } catch (execError) {
+      console.error('Execution failed:', execError);
+      pushFeed({
+        kind: 'error',
+        title: 'Execution failed',
+        detail: execError instanceof Error ? execError.message : 'Unknown error occurred',
+      });
+    }
+  };
+
   const resetFlow = () => {
     timers.current.forEach((timer) => clearTimeout(timer));
     timers.current = [];
@@ -906,6 +995,8 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
     // re-authorizing creates a fresh delegation and re-commits the root.
     setActiveDelegation(null);
     setOwnerRoot(null);
+    setLastVerifiedReceipt(null);
+    setActionExecuted(false);
     setFeed([
       {
         id: 'reset',
@@ -1289,6 +1380,19 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
                           ' · choose an elevated delegation tier.'}
                       </span>
                     </div>
+                  )}
+                  {verificationPhase === 'approved' && lastVerifiedReceipt && !actionExecuted && (
+                    <button
+                      className="action-button high"
+                      onClick={executeHighAction}
+                      disabled={actionExecuted}
+                      data-testid="button-execute-high-stakes"
+                    >
+                      <Zap className="action-icon" size={17} />
+                      <ArrowRight className="action-arrow" size={14} />
+                      <span className="action-name">Execute purchase</span>
+                      <span className="action-meta">$500 · authorized on-chain</span>
+                    </button>
                   )}
                 </div>
               </section>
