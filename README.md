@@ -245,7 +245,7 @@ The intended model is:
 ```text
 Private authorization information
               ↓
-         ZK prover
+      Verifier checks tier, expiry, revocation
               ↓
       Cryptographic proof
               ↓
@@ -621,7 +621,7 @@ It does not custody real funds and should not be treated as production authoriza
 
 A production implementation would require additional work, including:
 
-* Complete ZK proof generation
+* Optional privacy-preserving verification (future)
 * Stronger verifier testing
 * Smart-contract audits
 * Production-grade revocation
@@ -645,11 +645,10 @@ A production implementation would require additional work, including:
 * High-stakes verification flow
 * Authorization contracts
 
-## Phase 2 - Cryptographic Authorization
+## Phase 2 - Enhanced Authorization (Future)
 
-* Complete ZK proof generation
-* Anonymous authorization proofs
-* On-chain proof verification
+* Optional anonymous authorization proofs
+* On-chain proof verification enhancements
 * Replay protection
 * Nullifiers
 * Stronger delegation policies
