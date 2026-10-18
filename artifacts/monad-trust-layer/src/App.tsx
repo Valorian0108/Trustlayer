@@ -687,12 +687,41 @@ SOLUTION: Send testnet MON from your external wallet to your Privy wallet addres
   };
 
   const runSmallAction = async () => {
-    if (!delegationActive) return;
+    if (!activeDelegation) {
+      pushFeed({
+        kind: 'blocked',
+        title: 'Small purchase blocked by policy',
+        detail: 'No active delegation found. Create a delegation first.',
+      });
+      return;
+    }
+
+    // Phase: small-action policy check — micro tier ($3) requires Basic delegation or higher,
+    // not expired, and not revoked.
+    const now = BigInt(Math.floor(Date.now() / 1000));
+    if (activeDelegation.expiresAt !== 0n && activeDelegation.expiresAt <= now) {
+      pushFeed({
+        kind: 'blocked',
+        title: 'Small purchase blocked by policy',
+        detail: 'Delegation has expired. Create a new delegation.',
+      });
+      return;
+    }
+    if (activeDelegation.tier < 0) {
+      pushFeed({
+        kind: 'blocked',
+        title: 'Small purchase blocked by policy',
+        detail: 'Delegation tier is invalid.',
+      });
+      return;
+    }
+
     pushFeed({
-      kind: 'success',
-      title: 'Small purchase auto-approved',
-      detail: '$3 action · no proof requested.',
+      kind: 'pending',
+      title: 'Small purchase within delegated authority',
+      detail: '$3 action · tier ' + (activeDelegation.tier === 2 ? 'Elevated' : activeDelegation.tier === 1 ? 'Routine' : 'Basic') + ' · no proof required.',
     });
+
     // Step 1: settle the small action on Monad testnet when an agent wallet is
     // connected. Purely additive — any failure keeps the feed-only demo behavior.
     if (agentManager.isConnected()) {
