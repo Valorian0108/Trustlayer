@@ -110,9 +110,11 @@ The current prototype includes:
 * Owner and agent wallet separation
 * Micro, Routine, and Elevated authorization tiers
 * Live low-stakes transactions on Monad Testnet
-* High-stakes verification demo flow
+* On-chain high-stakes authorization via Merkle inclusion proofs
+* Tier, expiry, revocation, and replay (nullifier) enforcement on-chain
+* Execution gated on a verified authorization receipt
 * Deployed DelegationRegistry contract
-* Deployed AuthorizationVerifier contract interface
+* Deployed AuthorizationVerifierV2 contract
 * Transaction hashes and explorer links
 * Activity feed
 * Responsive dashboard
@@ -133,18 +135,22 @@ The following components are currently live:
 * Owner/agent separation
 * Delegation and authorization tier UI
 * Low-stakes transaction execution
+* On-chain authorization verification (AuthorizationVerifierV2)
+* Merkle inclusion proofs committed and verified on Monad Testnet
+* Tier, expiry, revocation, and replay (nullifier) enforcement on-chain
+* Post-authorization execution gated on the verified receipt
 * Monad Testnet transaction signing
 * Explorer transaction links
 * Activity feed
 
 ## Simulated
 
-The following remains simulated in the current prototype:
+Only the privacy layer is simulated in the current prototype:
 
 - Privacy-preserving zero-knowledge proof generation
-- Full anonymous on-chain proof verification
+- Anonymous on-chain proof verification
 
-The prototype demonstrates deterministic, tier-based authorization on Monad testnet. Real Merkle-proof verification against AuthorizationVerifierV2 is live when `VITE_AUTHORIZATION_VERIFIER_V2_ADDRESS` is configured.
+Everything else — delegation, Merkle-proof authorization, replay protection, and execution gating — runs on Monad Testnet. Real Merkle-proof verification against AuthorizationVerifierV2 is live when `VITE_AUTHORIZATION_VERIFIER_V2_ADDRESS` is configured.
 
 ---
 
@@ -238,25 +244,23 @@ The authorization requirement increases with the risk of the action.
 
 Higher-risk actions require stronger evidence that the human owner authorized the action.
 
-Future versions may add privacy-preserving verification. This prototype focuses on the authorization architecture and risk routing.
-
-The intended model is:
+The owner commits a Merkle root of their signed delegations on-chain. To authorize a high-stakes action, the agent submits a Merkle inclusion proof to `AuthorizationVerifierV2`, which checks tier, expiry, and revocation on Monad Testnet. On success the contract marks the action's nullifier as used so the same proof cannot be replayed, and records the authorization.
 
 ```text
-Owner delegates to agent
+Owner commits delegation Merkle root
               ↓
-      Verifier checks tier, expiry, revocation
+Agent submits inclusion proof (owner, delegationId, agent, tier, expiresAt)
               ↓
-      Cryptographic proof
+AuthorizationVerifierV2 checks tier, expiry, revocation
               ↓
-       Public verifier
+Nullifier consumed → replay protected
               ↓
-      Authorization result
+Authorization receipt (only then may the agent execute)
 ```
 
-The current implementation demonstrates the high-stakes verification flow.
+Execution is gated on that receipt: the agent wallet can only settle the high-stakes action after the on-chain verification succeeds.
 
-Full anonymous ZK proof generation and on-chain verification remain part of the future cryptographic implementation.
+Privacy-preserving (zero-knowledge) verification is **not** part of this build — it remains on the roadmap.
 
 ---
 
@@ -414,7 +418,7 @@ For high-stakes actions, the current build proves authorization deterministicall
 
 A future version may add zero-knowledge proofs to prove authorization conditions without revealing the owner's identity. That privacy layer is not part of this prototype.
 
-The current implementation establishes the authorization architecture and demonstrates the high-stakes verification flow. Anonymous ZK proof generation and on-chain verification remain part of the roadmap.
+The current implementation establishes the authorization architecture; anonymous ZK proof generation and on-chain verification remain on the roadmap.
 
 ---
 # Why Monad Chain?
@@ -501,24 +505,33 @@ EXECUTION
 **Network:** Monad Testnet
 **Chain ID:** 10143
 **RPC:** `https://testnet-rpc.monad.xyz`
+**Explorer:** `https://testnet.monadscan.com`
 
 ### DelegationRegistry
+
+Owner → agent authority records.
 
 ```text
 0x088bc310c841fA5ed5b28F37050c3B419572b70d
 ```
 
-### AuthorizationVerifier
+### AuthorizationVerifier (legacy)
+
+Earlier verifier interface, retained for compatibility.
 
 ```text
 0xEc1d82473aCC8AE1BC1F9B0D79C9dd8a2ee6cFaF
 ```
 
-### AuthorizationVerifierV2
+### AuthorizationVerifierV2 (current)
+
+Merkle inclusion verification with tier, expiry, revocation, and replay protection.
 
 ```text
 0x82912805399B9924b6F0aF9360FBd9f91a5Fb6c7
 ```
+
+Explorer: `https://testnet.monadscan.com/address/0x82912805399B9924b6F0aF9360FBd9f91a5Fb6c7`
 
 ---
 
@@ -554,11 +567,13 @@ The intended demonstration is:
                     ↓
 6. Run high-stakes $500 purchase
                     ↓
-7. Verification is triggered
+7. On-chain authorization verification (Merkle proof + nullifier)
                     ↓
-8. Review authorization activity
+8. Execute the action once authorized
                     ↓
-9. Review transaction links
+9. Review authorization activity
+                    ↓
+10. Review transaction links
 ```
 
 The demo shows the difference between acting within delegated authority and requiring stronger authorization for a high-stakes action.
@@ -615,7 +630,7 @@ Trust Layer is designed around the assumption that an agent wallet should not au
 | Agent wallet exceeds limits               | Reject or require stronger authorization              |
 | High-value action                         | Route to verification                                 |
 | Compromised agent wallet                  | Limit authority through delegation                    |
-| Replay attempt                            | Production design requires nonce/nullifier mechanisms |
+| Replay attempt                            | Nullifier consumed on-chain (AuthorizationVerifierV2)  |
 
 The security model is therefore based on **constrained authority rather than unrestricted trust**.
 
@@ -630,11 +645,9 @@ It does not custody real funds and should not be treated as production authoriza
 A production implementation would require additional work, including:
 
 * Optional privacy-preserving verification (future)
-* Stronger verifier testing
+* Stronger verifier testing and formal review
 * Smart-contract audits
-* Production-grade revocation
-* Replay protection
-* Nullifiers
+* Broader revocation and nullifier coverage (currently enforced for the V2 high-stakes flow)
 * Mobile proof generation
 * Monitoring
 * Failure handling
@@ -650,15 +663,15 @@ A production implementation would require additional work, including:
 * Delegation tiers
 * Risk-based action routing
 * Monad Testnet transactions
-* High-stakes verification flow
+* On-chain Merkle-proof authorization (AuthorizationVerifierV2)
+* Nullifier-based replay protection
+* Execution gated on verified authorization
 * Authorization contracts
 
 ## Phase 2 - Enhanced Authorization (Future)
 
 * Optional anonymous authorization proofs
 * On-chain proof verification enhancements
-* Replay protection
-* Nullifiers
 * Stronger delegation policies
 * Improved revocation
 
