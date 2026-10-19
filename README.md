@@ -10,6 +10,8 @@
   <img src="https://img.shields.io/badge/license-MIT-7e8c86?style=flat-square&labelColor=14130F" alt="MIT license">
 </p>
 
+> **Submission timeline:** the deadline state is tagged [`submission-2026-10-13`](https://github.com/Valorian0108/Trustlayer/tree/submission-2026-10-13); `main` includes disclosed post-deadline work. [Details](#submission-timeline).
+
 ## A Proportional Authorization Infrastructure for AI Agents
 
 > **Small action: proceed. High-stakes action: prove authorization first.**
@@ -101,7 +103,7 @@ Require stronger authorization proof
 This creates a permission boundary between the human owner and the AI agent.
 
 ---
- Current Build
+# Current Build
 
 The current prototype includes:
 
@@ -123,7 +125,7 @@ The prototype demonstrates the authorization experience and infrastructure direc
 
 ---
 
-# Live vs Simulated
+# Live vs Roadmap
 
 ## Live
 
@@ -143,14 +145,14 @@ The following components are currently live:
 * Explorer transaction links
 * Activity feed
 
-## Simulated
+## Not Implemented (Roadmap)
 
-Only the privacy layer is simulated in the current prototype:
+Zero-knowledge privacy is **not** part of the current build:
 
 - Privacy-preserving zero-knowledge proof generation
-- Anonymous on-chain proof verification
+- Anonymous on-chain verification
 
-Everything else — delegation, Merkle-proof authorization, replay protection, and execution gating — runs on Monad Testnet. Real Merkle-proof verification against AuthorizationVerifierV2 is live when `VITE_AUTHORIZATION_VERIFIER_V2_ADDRESS` is configured.
+Everything else — delegation, Merkle-proof authorization, replay protection, and execution gating — runs on Monad Testnet. Real Merkle-proof verification against AuthorizationVerifierV2 is live when `VITE_AUTHORIZATION_VERIFIER_V2_ADDRESS` is configured. When that variable is not set, the app falls back to a clearly labeled simulation instead of sending a verification transaction.
 
 ## Verified On-Chain (Live)
 
@@ -767,3 +769,25 @@ Trust Layer explores a permission boundary for an onchain economy where AI agent
 The core question is simple:
 
 > **If agents are going to act in the onchain economy, what should they be allowed to do - and how can that authority be verified?**
+
+---
+
+# Submission Timeline
+
+Trust Layer was submitted to **Monad Metropolis** (Track 4: Trust, Identity & AI Infrastructure). The Metropolis build window was **Sep 1 – Oct 13, 2026**, and judging ran **Oct 14 – 27, 2026**.
+
+To be explicit about the timeline:
+
+| | |
+| --- | --- |
+| Deadline state | commit `74d60f4` (Sep 16, 2026) |
+| Tag | [`submission-2026-10-13`](https://github.com/Valorian0108/Trustlayer/tree/submission-2026-10-13) |
+| Current `main` | includes post-deadline work, Oct 17–19, 2026 |
+
+At the Oct 13 deadline, the high-stakes verification step was **simulated**, and the README said so. After the deadline I deployed `AuthorizationVerifierV2` (real Merkle inclusion verification), wired it into the app, added an execution boundary, fixed a wallet transaction bug, and aligned the documentation. That work is on `main` and is **not** part of the deadline submission.
+
+No history was rewritten or backdated.
+
+* If you are reviewing the **deadline submission**, use the tag: [`submission-2026-10-13`](https://github.com/Valorian0108/Trustlayer/tree/submission-2026-10-13).
+* If post-deadline updates are permitted, the current `main` is the updated version.
+* Diff deadline → main: [`submission-2026-10-13...main`](https://github.com/Valorian0108/Trustlayer/compare/submission-2026-10-13...main)
