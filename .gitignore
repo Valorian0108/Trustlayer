@@ -57,6 +57,10 @@ Thumbs.db
 # Vercel
 .vercel
 
+# Internal agent/session files (kept locally, never published)
+.conversation/
+.agents/
+
 # Trust Layer deploy tooling: compiled artifacts are regenerable (node compile.mjs);
 # deployment.json (the record of what was deployed where) IS committed.
 deploy/out/*

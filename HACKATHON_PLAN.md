@@ -1,5 +1,7 @@
 # Monad Trust Layer — Hackathon Completion Plan
 
+> **Status:** historical planning document. The shipped design is documented in `README.md` and `CONTRACTS.md`. The current build uses deterministic Merkle-proof authorization on Monad testnet; zero-knowledge privacy is roadmap-only.
+
 ## Goal
 
 Ship a truthful, end-to-end Track 4 submission on Monad testnet:
@@ -7,7 +9,7 @@ Ship a truthful, end-to-end Track 4 submission on Monad testnet:
 1. A human creates a passkey-backed owner identity.
 2. The owner grants an agent a bounded authorization tier.
 3. Small actions proceed without unnecessary friction.
-4. High-stakes actions require a privacy-preserving authorization proof.
+4. High-stakes actions require an on-chain authorization proof.
 5. A verifier contract accepts or rejects the proof on Monad testnet.
 6. The dashboard shows the same flow with verifiable transaction evidence.
 
@@ -22,7 +24,6 @@ The current web artifact is the interaction shell. The next work replaces the lo
 - Confirm solo versus team registration.
 - Choose the sponsor targets:
   - Privy or Dynamic passkey bounty
-  - MetaMask agent wallet bounty
   - Monad community project bounty
 - Create or confirm the GitHub repository and Metropolis registration.
 
@@ -42,7 +43,7 @@ The current web artifact is the interaction shell. The next work replaces the lo
   - agent identifier
   - allowed stakes tier
   - expiry/revocation state
-- Add the verifier contract or Semaphore-compatible verifier.
+- Add the verifier contract (Merkle-proof verification).
 - Deploy both to Monad testnet.
 - Save verified contract addresses and ABI definitions in the project configuration.
 - Add viem/wagmi calls through a server-safe boundary where secrets or signing authority are involved.
@@ -63,7 +64,7 @@ The current web artifact is the interaction shell. The next work replaces the lo
   - record the action and policy decision
 - High-stakes path:
   - pause the agent action
-  - generate a Semaphore-style proof that a valid delegation exists
+  - generate a Merkle inclusion proof that a valid delegation exists
   - submit the proof to the verifier
   - show the verifier transaction and result
   - only then mark the action approved

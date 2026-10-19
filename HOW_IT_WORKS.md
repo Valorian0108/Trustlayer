@@ -103,10 +103,10 @@ Try the "Large purchase" ($500) button in the Action Console.
 **What happens:**
 - Trust Layer evaluates the action: $500 exceeds the immediate execution threshold
 - The system triggers the verification flow
-- You'll see a passkey or social login prompt
-- This simulates the human authorization check
-- After successful verification, the action proceeds
-- In production, this would use ZK proofs instead of simulation
+- The agent submits a Merkle inclusion proof to `AuthorizationVerifierV2` on Monad testnet
+- The contract checks tier, expiry, and revocation, then consumes the nullifier (replay protection)
+- Only after the verification transaction succeeds can the agent execute the action
+- Zero-knowledge privacy is roadmap-only; the current build uses deterministic Merkle proofs
 
 **Why this works:**
 - The action is high-risk ($500)

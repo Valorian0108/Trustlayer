@@ -31,9 +31,9 @@ An interactive trust console showing how an AI agent can move small actions thro
 
 - The first build is explicitly labelled Demo mode and uses local state; it does not claim real passkeys, proofs, wallet writes, or Monad transactions before those integrations are connected.
 - Privy is the selected owner identity provider; the browser uses only `VITE_PRIVY_APP_ID`, while any provider secret remains unused and must never enter client code.
-- The demo's primary story is proportional trust: a $3 action auto-approves while a $500 action runs through a visible proof → verify → approve sequence.
+- The demo's primary story is proportional trust: a $3 action proceeds within a valid delegation while a $500 action runs through a real Merkle proof → on-chain verify → authorized → execute sequence.
 - The UI is intentionally a single-screen console so a judge can understand and run the complete story without navigating through a multi-page product.
-- Integration seams are named in the product copy for Privy/Dynamic, Semaphore/verifier, MetaMask, and Monad testnet so the demo can become production-backed without rewriting the interaction model.
+- Integration seams are named in the product copy for Privy/Dynamic, the Merkle verifier, MetaMask, and Monad testnet so the demo can become production-backed without rewriting the interaction model.
 
 ## Product
 

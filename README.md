@@ -109,7 +109,7 @@ The current prototype includes:
 * Privy social login for browsers that do not support WebAuthn
 * Owner and agent wallet separation
 * Micro, Routine, and Elevated authorization tiers
-* Live low-stakes transactions on Monad Testnet
+* Low-stakes transactions settled on Monad Testnet (when an agent wallet is connected)
 * On-chain high-stakes authorization via Merkle inclusion proofs
 * Tier, expiry, revocation, and replay (nullifier) enforcement on-chain
 * Execution gated on a verified authorization receipt
@@ -134,7 +134,7 @@ The following components are currently live:
 * Wallet connection
 * Owner/agent separation
 * Delegation and authorization tier UI
-* Low-stakes transaction execution
+* Low-stakes transaction execution (when an agent wallet is connected)
 * On-chain authorization verification (AuthorizationVerifierV2)
 * Merkle inclusion proofs committed and verified on Monad Testnet
 * Tier, expiry, revocation, and replay (nullifier) enforcement on-chain
@@ -611,13 +611,13 @@ http://localhost:5173
 Create a `.env` file containing:
 
 ```env
-VITE_PRIVY_APP_ID=
+VITE_PRIVY_APP_ID=cmtrqskxl00rc0cjiaso8qnzf
 
-VITE_DELEGATION_REGISTRY_ADDRESS=
+VITE_DELEGATION_REGISTRY_ADDRESS=0x088bc310c841fA5ed5b28F37050c3B419572b70d
 
-VITE_AUTHORIZATION_VERIFIER_ADDRESS=
+VITE_AUTHORIZATION_VERIFIER_ADDRESS=0xEc1d82473aCC8AE1BC1F9B0D79C9dd8a2ee6cFaF
 
-VITE_AUTHORIZATION_VERIFIER_V2_ADDRESS=
+VITE_AUTHORIZATION_VERIFIER_V2_ADDRESS=0x82912805399B9924b6F0aF9360FBd9f91a5Fb6c7
 ```
 
 ## Requirements
